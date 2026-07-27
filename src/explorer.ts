@@ -11,6 +11,7 @@ export class FileExplorer {
   private currentFolder: string | null = null;
   private expandedFolders: Set<string> = new Set();
   private filterQuery: string = '';
+  private favorites: Set<string> = new Set(JSON.parse(localStorage.getItem('piconote-favorites') || '[]'));
   private onFileSelect?: (filePath: string) => void;
 
   constructor(
@@ -35,7 +36,35 @@ export class FileExplorer {
       this.filterQuery = this.searchInput.value.trim().toLowerCase();
       if (this.currentFolder) this.refresh();
     });
+
+    this.renderFavorites();
   }
+
+  public renderFavorites(): void {
+    const container = document.getElementById('favorites-container');
+    const listEl = document.getElementById('favorites-list');
+    if (!container || !listEl) return;
+
+    if (this.favorites.size === 0) {
+      container.classList.add('hidden');
+      return;
+    }
+
+    container.classList.remove('hidden');
+    listEl.innerHTML = '';
+
+    this.favorites.forEach((favPath) => {
+      const filename = favPath.replace(/\\/g, '/').split('/').pop() || favPath;
+      const item = document.createElement('div');
+      item.className = 'favorite-item';
+      item.innerHTML = `<span>⭐</span><span>${filename}</span>`;
+      item.addEventListener('click', () => {
+        if (this.onFileSelect) this.onFileSelect(favPath);
+      });
+      listEl.appendChild(item);
+    });
+  }
+
 
   public getCurrentFolder(): string | null {
     return this.currentFolder;
@@ -273,9 +302,11 @@ export class FileExplorer {
     const menu = document.createElement('div');
     menu.id = 'context-menu';
 
-    const targetDir = item.is_directory ? item.path : item.path.slice(0, item.path.lastIndexOf('\\'));
+    const isFav = this.favorites.has(item.path);
 
     menu.innerHTML = `
+      <div class="ctx-item" id="ctx-fav">${isFav ? '⭐ Remove Favorite' : '⭐ Pin to Favorites'}</div>
+      <div class="ctx-divider"></div>
       <div class="ctx-item" id="ctx-new-file">➕ New File Here</div>
       <div class="ctx-item" id="ctx-new-folder">📁 New Folder Here</div>
       <div class="ctx-item" id="ctx-reveal">📂 Reveal in System Explorer</div>
@@ -283,6 +314,7 @@ export class FileExplorer {
       <div class="ctx-item" id="ctx-rename">✏️ Rename</div>
       <div class="ctx-item danger" id="ctx-delete">🗑️ Delete</div>
     `;
+
 
     document.body.appendChild(menu);
 
@@ -302,11 +334,20 @@ export class FileExplorer {
     menu.style.left = `${Math.max(margin, posX)}px`;
     menu.style.top = `${Math.max(margin, posY)}px`;
 
-    const closeCtx = () => menu.remove();
-    setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
+    menu.querySelector('#ctx-fav')?.addEventListener('click', () => {
+      if (this.favorites.has(item.path)) {
+        this.favorites.delete(item.path);
+      } else {
+        this.favorites.add(item.path);
+      }
+      localStorage.setItem('piconote-favorites', JSON.stringify(Array.from(this.favorites)));
+      this.renderFavorites();
+    });
 
+    const targetDir = item.is_directory ? item.path : item.path.slice(0, item.path.lastIndexOf('\\'));
 
     menu.querySelector('#ctx-new-file')?.addEventListener('click', async () => {
+
       const fileName = prompt('Enter new file name:', 'untitled.md');
       if (fileName) {
         const fullPath = `${targetDir}\\${fileName}`;

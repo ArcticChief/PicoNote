@@ -18,6 +18,10 @@ class PicoNoteApp {
   private palette!: CommandPalette;
   private spotlight!: SpotlightSearch;
   private explorer!: FileExplorer;
+  private editor2: CodeMirrorEditor | null = null;
+  private isSplitView: boolean = false;
+  private autoSaveEnabled: boolean = true;
+  private autoSaveTimer: any = null;
 
   private previewVisible: boolean = false;
   private outlineVisible: boolean = false;
@@ -56,6 +60,8 @@ class PicoNoteApp {
 
     this.editor = new CodeMirrorEditor(this.editorContainer);
     this.editor.setTheme(this.themeManager.getTheme() === 'dark');
+    this.editor.setOnChange((content) => this.handleDocChange(content));
+
 
     this.tabManager = new TabManager(
       (activeTab) => this.onActiveTabChanged(activeTab),
@@ -372,6 +378,8 @@ class PicoNoteApp {
   private setupCommands(): void {
     this.palette.registerCommands([
       { id: 'spotlight-search', label: 'Workspace: Global Spotlight Search...', shortcut: 'Ctrl+K', action: () => this.spotlight.show() },
+      { id: 'daily-journal', label: 'Journal: Open / Create Today\'s Daily Journal', shortcut: 'Ctrl+Alt+N', action: () => this.openDailyJournal() },
+      { id: 'split-view', label: 'View: Toggle Split Editor Pane', shortcut: 'Ctrl+\\', action: () => this.toggleSplitView() },
       { id: 'set-main-folder', label: 'Workspace: Set Main Folder (Entry Point)...', shortcut: 'Ctrl+Shift+O', action: () => this.setMainWorkspaceFolder() },
       { id: 'new-file', label: 'File: New File', shortcut: 'Ctrl+N', action: () => this.newFile() },
       { id: 'open-file', label: 'File: Open File...', shortcut: 'Ctrl+O', action: () => this.openFileDialog() },
@@ -806,7 +814,89 @@ class PicoNoteApp {
       this.outlineList.appendChild(el);
     });
   }
+
+  private handleDocChange(content: string): void {
+    const words = (content.match(/\b[\w'-]+\b/g) || []).length;
+    const chars = content.length;
+    const readTime = Math.max(1, Math.ceil(words / 200));
+    const wordEl = document.getElementById('status-word-count');
+    if (wordEl) {
+      wordEl.textContent = `${words.toLocaleString()} words · ${chars.toLocaleString()} chars · ~${readTime} min read`;
+    }
+
+    const activeTab = this.tabManager.getActiveTab();
+    if (activeTab) {
+      this.tabManager.updateActiveContent(content);
+      if (this.previewVisible) this.updateMarkdownPreview(content);
+      if (this.outlineVisible) this.updateOutline(content);
+
+      if (this.isSplitView && this.editor2) {
+        this.editor2.setContent(content, activeTab.path || '');
+      }
+
+      if (this.autoSaveEnabled && activeTab.path) {
+        if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
+        const dot = document.getElementById('autosave-dot');
+        if (dot) dot.style.background = '#fbbf24';
+
+        this.autoSaveTimer = setTimeout(async () => {
+          const cur = this.tabManager.getActiveTab();
+          if (cur && cur.path && cur.isDirty) {
+            await api.writeFile(cur.path, cur.content);
+            this.tabManager.markActiveSaved(cur.path, cur.name);
+            if (dot) dot.style.background = '#10b981';
+          }
+        }, 1000);
+      }
+    }
+  }
+
+  private async openDailyJournal(): Promise<void> {
+    const folder = this.explorer.getCurrentFolder() || localStorage.getItem('piconote-main-folder');
+    if (!folder) {
+      alert('Please open or set a workspace folder first.');
+      return;
+    }
+    const journalDir = `${folder}\\Journal`;
+    await api.createFolder(journalDir);
+
+    const today = new Date().toISOString().split('T')[0];
+    const fullPath = `${journalDir}\\${today}.md`;
+    const exists = await api.pathExists(fullPath);
+
+    if (!exists) {
+      const template = `---\ntitle: Daily Journal ${today}\ndate: ${today}\ntags: [journal, daily]\n---\n\n# 📓 Journal - ${today}\n\n## Today's Focus\n- [ ] \n\n## Notes\n\n`;
+      await api.writeFile(fullPath, template);
+      await this.explorer.refresh();
+    }
+
+    await this.openFileByPath(fullPath);
+  }
+
+  private toggleSplitView(): void {
+    this.isSplitView = !this.isSplitView;
+    const container2 = document.getElementById('editor-container-2');
+    const resizer = document.getElementById('split-resizer');
+
+    if (this.isSplitView) {
+      container2?.classList.remove('hidden');
+      resizer?.classList.remove('hidden');
+      if (!this.editor2 && container2) {
+        this.editor2 = new CodeMirrorEditor(container2);
+        this.editor2.setTheme(this.themeManager.getTheme() === 'dark');
+      }
+      const activeTab = this.tabManager.getActiveTab();
+      if (activeTab && this.editor2) {
+        this.editor2.setContent(activeTab.content, activeTab.path || '');
+      }
+    } else {
+      container2?.classList.add('hidden');
+      resizer?.classList.add('hidden');
+    }
+  }
+
 }
+
 
 // Start application
 document.addEventListener('DOMContentLoaded', () => {

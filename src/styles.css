@@ -632,6 +632,89 @@ body, html {
   border-left: 3px solid var(--accent-primary);
 }
 
+/* Favorites Section in Sidebar */
+.favorites-section {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: rgba(99, 102, 241, 0.04);
+}
+
+.favorites-section.hidden {
+  display: none;
+}
+
+.favorites-header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent-amber);
+  margin-bottom: 4px;
+}
+
+.favorites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.favorite-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.favorite-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Glassmorphic Formatting Toolbar */
+.formatting-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  z-index: 10;
+}
+
+.fmt-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fmt-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.fmt-divider {
+  width: 1px;
+  height: 14px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+}
+
 /* Workspace Area */
 #workspace {
   flex: 1;
@@ -640,12 +723,51 @@ body, html {
   overflow: hidden;
 }
 
-#editor-container {
+/* Dual Editor Split Pane */
+.editor-pane {
   flex: 1;
   height: 100%;
   overflow: hidden;
   background-color: var(--bg-primary);
 }
+
+.editor-pane.hidden {
+  display: none !important;
+}
+
+/* AutoSave Pill in Status Bar */
+.status-pill-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.status-pill-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.status-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+}
+
+.status-pill-dot.active {
+  background-color: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
 
 /* Resizer Handle */
 .resizer {

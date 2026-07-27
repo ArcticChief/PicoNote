@@ -54,6 +54,9 @@
             EXPLORER
           </span>
           <div class="sidebar-actions">
+            <button id="btn-journal" class="sidebar-btn" title="Daily Journal / Scratchpad (Ctrl+Alt+N)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            </button>
             <button id="btn-new-file" class="sidebar-btn" title="New File (Ctrl+N)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
@@ -80,6 +83,12 @@
           <input id="folder-path-input" type="hidden" />
         </div>
 
+        <!-- Favorites / Pinned Files Container -->
+        <div id="favorites-container" class="favorites-section hidden">
+          <div class="favorites-header">⭐ FAVORITES</div>
+          <div id="favorites-list" class="favorites-list"></div>
+        </div>
+
         <div id="file-explorer">
           <div class="welcome-msg">Open a folder to start editing</div>
         </div>
@@ -97,6 +106,10 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
         <div class="tab-actions">
+          <button id="btn-split-editor" class="tb-btn" title="Toggle Split View Dual Editor (Ctrl+\)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+            Split
+          </button>
           <button id="btn-all-tabs" class="tb-btn" title="List All Open Tabs">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
             <span id="btn-all-tabs-text">Tabs</span>
@@ -123,9 +136,29 @@
         <div id="all-tabs-list" class="tabs-dropdown-list"></div>
       </div>
 
+      <!-- Modern Glassmorphic Markdown Formatting Toolbar -->
+      <div id="formatting-toolbar" class="formatting-bar">
+        <button class="fmt-btn" data-fmt="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+        <button class="fmt-btn" data-fmt="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+        <button class="fmt-btn" data-fmt="strike" title="Strikethrough"><s>S</s></button>
+        <span class="fmt-divider"></span>
+        <button class="fmt-btn" data-fmt="h1" title="Heading 1">H1</button>
+        <button class="fmt-btn" data-fmt="h2" title="Heading 2">H2</button>
+        <button class="fmt-btn" data-fmt="h3" title="Heading 3">H3</button>
+        <span class="fmt-divider"></span>
+        <button class="fmt-btn" data-fmt="code" title="Inline / Block Code">&lt;/&gt;</button>
+        <button class="fmt-btn" data-fmt="link" title="Insert Link">🔗</button>
+        <button class="fmt-btn" data-fmt="task" title="Checklist Item">☑️</button>
+        <button class="fmt-btn" data-fmt="quote" title="Blockquote">“”</button>
+        <button class="fmt-btn" data-fmt="table" title="Insert Table">📊</button>
+      </div>
+
       <!-- Workspace Area -->
       <div id="workspace">
-        <div id="editor-container"></div>
+        <div id="editor-container" class="editor-pane"></div>
+        <div id="split-resizer" class="resizer hidden" title="Drag to resize split editors"></div>
+        <div id="editor-container-2" class="editor-pane hidden"></div>
+
         <div id="preview-resizer" class="resizer hidden" title="Drag to resize editor & preview"></div>
         <div id="md-preview" class="hidden">
           <div class="preview-header">
@@ -151,10 +184,9 @@
         <!-- TOC Outline Drawer -->
         <div id="outline-drawer" class="hidden">
           <div class="outline-header">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="16" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="12" y2="18"></line></svg>
-            OUTLINE
+            <span class="outline-title">HEADING OUTLINE</span>
           </div>
-          <div class="outline-list" id="outline-list"></div>
+          <div id="outline-list" class="outline-list"></div>
         </div>
 
         <!-- Welcome Overlay Screen -->
@@ -175,9 +207,9 @@
               <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>K</kbd> <span>Spotlight Search</span></div>
               <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>P</kbd> <span>Command Palette</span></div>
               <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>N</kbd> <span>New File</span></div>
-              <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>S</kbd> <span>Save Document</span></div>
+              <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>N</kbd> <span>Daily Journal</span></div>
+              <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>\</kbd> <span>Split Editor</span></div>
               <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> <span>Toggle Live Preview</span></div>
-              <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Click</kbd> <span>Open Links / Notes</span></div>
             </div>
           </div>
         </div>
@@ -186,10 +218,17 @@
       <!-- Status Bar -->
       <div id="status-bar">
         <div class="status-left">
-          <span class="status-indicator-dot"></span>
+          <span class="status-indicator-dot" id="status-dot"></span>
           <span id="status-filename">No file open</span>
+          <span class="status-divider">|</span>
+          <button id="btn-autosave-toggle" class="status-pill-btn" title="Toggle Auto-Save On/Off">
+            <span class="status-pill-dot active" id="autosave-dot"></span>
+            <span id="autosave-label">AUTOSAVE: ON</span>
+          </button>
         </div>
         <div class="status-right">
+          <span id="status-word-count">0 words · 0 chars · ~0 min read</span>
+          <span class="status-divider">|</span>
           <span id="status-cursor">Ln 1, Col 1</span>
           <span class="status-divider">|</span>
           <span id="status-encoding">UTF-8</span>

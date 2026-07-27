@@ -279,10 +279,78 @@ export class CodeMirrorEditor {
     this.focus();
   }
 
+  public applyFormatting(type: string): void {
+    const sel = this.view.state.selection.main;
+    const selectedText = this.view.state.sliceDoc(sel.from, sel.to);
+
+    let replacement = '';
+    let cursorOffset = 0;
+
+    switch (type) {
+      case 'bold':
+        replacement = `**${selectedText || 'bold text'}**`;
+        cursorOffset = selectedText ? replacement.length : 2;
+        break;
+      case 'italic':
+        replacement = `*${selectedText || 'italic text'}*`;
+        cursorOffset = selectedText ? replacement.length : 1;
+        break;
+      case 'strike':
+        replacement = `~~${selectedText || 'strikethrough text'}~~`;
+        cursorOffset = selectedText ? replacement.length : 2;
+        break;
+      case 'h1':
+        replacement = `# ${selectedText || 'Heading 1'}`;
+        cursorOffset = replacement.length;
+        break;
+      case 'h2':
+        replacement = `## ${selectedText || 'Heading 2'}`;
+        cursorOffset = replacement.length;
+        break;
+      case 'h3':
+        replacement = `### ${selectedText || 'Heading 3'}`;
+        cursorOffset = replacement.length;
+        break;
+      case 'code':
+        if (selectedText.includes('\n')) {
+          replacement = `\`\`\`\n${selectedText}\n\`\`\``;
+        } else {
+          replacement = `\`${selectedText || 'code'}\``;
+        }
+        cursorOffset = replacement.length;
+        break;
+      case 'link':
+        replacement = `[${selectedText || 'Link Title'}](https://example.com)`;
+        cursorOffset = replacement.length;
+        break;
+      case 'task':
+        replacement = `- [ ] ${selectedText || 'New task item'}`;
+        cursorOffset = replacement.length;
+        break;
+      case 'quote':
+        replacement = `> ${selectedText || 'Quote'}`;
+        cursorOffset = replacement.length;
+        break;
+      case 'table':
+        replacement = `\n| Header 1 | Header 2 |\n| -------- | -------- |\n| Item 1   | Item 2   |\n`;
+        cursorOffset = replacement.length;
+        break;
+    }
+
+    if (replacement) {
+      this.view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: replacement },
+        selection: { anchor: sel.from + cursorOffset },
+      });
+      this.view.focus();
+    }
+  }
+
   public destroy(): void {
     this.view.destroy();
   }
 }
+
 
 function getLinkAtPos(docText: string, pos: number): DetectedLink | null {
   const lineStart = docText.lastIndexOf('\n', pos - 1) + 1;
