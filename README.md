@@ -1,102 +1,75 @@
-<div align="center">
+# PicoNote
 
-# 📝 PicoNote
+PicoNote is a lightweight, frameless desktop Markdown and code editor built with Tauri v2, Rust, TypeScript, and CodeMirror 6.
 
-**A sleek, frameless, lightning-fast desktop Markdown & Code Editor built with Tauri v2, Rust, TypeScript & CodeMirror 6.**
+## Features
 
-![PicoNote Banner](https://raw.githubusercontent.com/ArcticChief/PicoNote/main/src-tauri/icons/128x128.png)
+- **Frameless Window Interface**: Custom window title bar with native window controls (minimize, maximize, close, and drag regions) and an ambient window outline.
+- **Image Clipboard Integration**: Paste image data (`Ctrl+V`) directly into Markdown documents. Images are saved to a local `assets/` directory and rendered via blob object URLs.
+- **Live Markdown Preview**: Split-pane GitHub Flavored Markdown preview with a draggable vertical resizer and toggle options.
+- **File Explorer**: Sidebar file tree supporting internal drag-and-drop file reordering, external file imports, collapsible directory trees, inline file filtering, and viewport-aware context menus.
+- **Tab Management**: Multi-tab workspace with color tagging, pin state, dirty indicators, scrollable navigation, and a tab selection menu.
+- **Media Viewer**: Dedicated image viewer tab for viewing `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.ico`, and `.bmp` files with dimension metadata.
+- **Search and Navigation**:
+  - `Ctrl+P`: Spotlight vault search for finding files and text content.
+  - `Ctrl+Shift+P`: Command palette for executing editor actions.
 
-[![Tauri v2](https://img.shields.io/badge/Tauri-v2.0-blue.svg?logo=tauri)](https://tauri.app)
-[![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg?logo=rust)](https://www.rust-lang.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg?logo=typescript)](https://www.typescriptlang.org)
-[![CodeMirror 6](https://img.shields.io/badge/CodeMirror-v6-black.svg)](https://codemirror.net/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+## Technology Stack
 
-</div>
+- **Desktop Framework**: Tauri v2
+- **Backend IPC**: Rust
+- **Frontend**: TypeScript, HTML5, Vanilla CSS
+- **Editor Engine**: CodeMirror 6
+- **Build Tool**: Vite
 
----
-
-## ✨ Features
-
-- **🎨 Modern Frameless UI**: Sleek dark mode design system with custom window titlebar, soft ambient window outline glow, and native window action controls (Minimize, Maximize/Restore, Close, Window Dragging).
-- **🖼️ Native Image Clipboard Pasting**: Press `Ctrl+V` to paste image data from your clipboard directly into Markdown documents. Images are automatically saved into an `assets/` subfolder, inserted as relative GFM links `![Image](assets/...)`, and rendered instantly using secure Blob Object URLs.
-- **👁️ Live Markdown Preview & Resizable Splitter**: GFM live preview panel featuring a draggable vertical resizer divider and one-click close button (`✕`) or shortcut (`Ctrl+Shift+M`).
-- **📂 Advanced File Explorer & Drag-and-Drop**:
-  - Drag and drop files or subfolders inside the sidebar to move them instantly.
-  - Drag external files from your Windows desktop or File Explorer into PicoNote.
-  - Sleek 2-row sidebar toolbar with quick actions (New File, New Folder, Collapse/Expand All, Refresh).
-  - Integrated search filter bar for instant file matching.
-  - Smart viewport-clamped right-click context menus (`📂 Reveal in Explorer`, `✏️ Rename`, `🗑️ Move to Trash`).
-- **📑 Tab Manager & Color Tags**: Pin tabs, apply color tags (Purple, Blue, Green, Amber, Red), view unsaved changes (`●`), scrollable tab bar, and an "All Open Tabs" dropdown menu.
-- **🖼️ Native Image Viewer**: Double-click `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.ico`, or `.bmp` files to view them in a dedicated viewer tab with dark grid backdrop and dimension badge.
-- **🔍 Spotlight Search & Command Palette**:
-  - `Ctrl+P`: Instant Spotlight vault search across all files and contents.
-  - `Ctrl+Shift+P`: Command Palette to execute all editor actions with keyboard shortcuts.
-
----
-
-## 🛠️ Tech Stack
-
-- **Core**: Tauri v2 + Rust
-- **Frontend**: TypeScript, HTML5, Vanilla CSS Design System
-- **Editor**: CodeMirror 6 (with syntax highlighting for 100+ languages, line numbers, autocomplete, and GFM extensions)
-- **Build System**: Vite
-
----
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [Rust](https://www.rust-lang.org/) (latest stable toolchain)
+- Node.js (v18 or higher)
+- Rust toolchain (stable)
 - Windows C++ Build Tools (for Tauri compilation)
 
-### Installation
+### Build Instructions
 
-1. **Clone the Repository**:
+1. Clone the repository:
    ```bash
    git clone https://github.com/ArcticChief/PicoNote.git
    cd PicoNote
    ```
 
-2. **Install Dependencies**:
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-3. **Run Development Mode**:
+3. Run in development mode:
    ```bash
    npm run tauri dev
    ```
 
-4. **Build Production Installer & Executables**:
+4. Build production binaries:
    ```bash
    npm run tauri build
    ```
 
-   *Target executables will be compiled to `src-tauri/target/release/bundle/nsis/PicoNote_1.0.0_x64-setup.exe` and `src-tauri/target/release/piconote.exe`.*
+Compiled executables will be located in `src-tauri/target/release/bundle/nsis/` and `src-tauri/target/release/`.
 
----
+## Keyboard Shortcuts
 
-## 🎹 Keyboard Shortcuts
-
-| Shortcut | Action |
+| Command | Action |
 | --- | --- |
-| `Ctrl + N` | New File |
-| `Ctrl + O` | Open File |
-| `Ctrl + Shift + O` | Set Workspace Folder |
-| `Ctrl + S` | Save File |
-| `Ctrl + Shift + S` | Save File As... |
-| `Ctrl + Shift + M` | Toggle Live Markdown Preview |
-| `Ctrl + Shift + O` | Toggle Heading Outline Drawer |
-| `Ctrl + P` | Spotlight Vault Search |
-| `Ctrl + Shift + P` | Command Palette |
-| `Ctrl + Shift + T` | Toggle Dark / Light Theme |
-| `Ctrl + V` | Paste Image from Clipboard into Document |
+| `Ctrl+N` | New File |
+| `Ctrl+O` | Open File |
+| `Ctrl+Shift+O` | Set Workspace Directory |
+| `Ctrl+S` | Save File |
+| `Ctrl+Shift+S` | Save File As |
+| `Ctrl+Shift+M` | Toggle Live Preview |
+| `Ctrl+P` | Spotlight Search |
+| `Ctrl+Shift+P` | Command Palette |
+| `Ctrl+Shift+T` | Toggle Dark / Light Theme |
+| `Ctrl+V` | Paste Image from Clipboard |
 
----
+## License
 
-## 📄 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License. See `LICENSE` for details.
