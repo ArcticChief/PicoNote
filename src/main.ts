@@ -276,9 +276,16 @@ class PicoNoteApp {
       this.explorer.toggleCollapseExpandAll();
     });
 
-    document.getElementById('btn-refresh')?.addEventListener('click', () => this.explorer.refresh());
+    // Polished Daily Diary Corner at Sidebar Bottom
+    const now = new Date();
+    const diaryBadge = document.getElementById('diary-date-badge');
+    if (diaryBadge) {
+      diaryBadge.textContent = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+    document.getElementById('btn-open-diary')?.addEventListener('click', () => this.openDailyJournal());
 
     document.getElementById('btn-preview-toggle')?.addEventListener('click', () => this.togglePreview());
+
     document.getElementById('btn-outline-toggle')?.addEventListener('click', () => this.toggleOutline());
     document.getElementById('btn-theme-toggle')?.addEventListener('click', () => this.toggleTheme());
 
@@ -852,26 +859,43 @@ class PicoNoteApp {
   }
 
   private async openDailyJournal(): Promise<void> {
-    const folder = this.explorer.getCurrentFolder() || localStorage.getItem('piconote-main-folder');
-    if (!folder) {
-      alert('Please open or set a workspace folder first.');
+    const rootFolder = this.explorer.getCurrentFolder() || localStorage.getItem('piconote-main-folder');
+    if (!rootFolder) {
+      alert('Please select or open a workspace folder first to initialize your Daily Diary.');
       return;
     }
-    const journalDir = `${folder}\\Journal`;
-    await api.createFolder(journalDir);
 
-    const today = new Date().toISOString().split('T')[0];
-    const fullPath = `${journalDir}\\${today}.md`;
+    const now = new Date();
+    const year = now.getFullYear().toString();
+    const monthNum = String(now.getMonth() + 1).padStart(2, '0');
+    const monthName = now.toLocaleString('en-US', { month: 'long' });
+    const monthFolder = `${monthNum}-${monthName}`;
+    const dayNum = String(now.getDate()).padStart(2, '0');
+    const dayName = now.toLocaleString('en-US', { weekday: 'long' });
+    const fullDateStr = `${year}-${monthNum}-${dayNum}`;
+    const filename = `${fullDateStr}_${dayName}.md`;
+
+    // Ensure nested folder structure: Journal / Year / Month
+    const journalBase = `${rootFolder}\\Journal`;
+    const yearDir = `${journalBase}\\${year}`;
+    const monthDir = `${yearDir}\\${monthFolder}`;
+
+    await api.createFolder(journalBase);
+    await api.createFolder(yearDir);
+    await api.createFolder(monthDir);
+
+    const fullPath = `${monthDir}\\${filename}`;
     const exists = await api.pathExists(fullPath);
 
     if (!exists) {
-      const template = `---\ntitle: Daily Journal ${today}\ndate: ${today}\ntags: [journal, daily]\n---\n\n# 📓 Journal - ${today}\n\n## Today's Focus\n- [ ] \n\n## Notes\n\n`;
+      const template = `---\ntitle: Daily Entry - ${dayName}, ${monthName} ${dayNum}, ${year}\ndate: ${fullDateStr}\nday: ${dayName}\nyear: ${year}\nmonth: ${monthName}\ntags: [diary, journal]\n---\n\n# 📓 ${dayName}, ${monthName} ${dayNum}, ${year}\n\n## 🌟 Daily Reflection & Focus\n- [ ] \n\n## 📝 Notes & Thoughts\n\n`;
       await api.writeFile(fullPath, template);
       await this.explorer.refresh();
     }
 
     await this.openFileByPath(fullPath);
   }
+
 
   private toggleSplitView(): void {
     this.isSplitView = !this.isSplitView;
