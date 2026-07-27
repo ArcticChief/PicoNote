@@ -4,7 +4,12 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { FileItem, FileInfo, SearchResult } from './types';
 
 export const api = {
+  showWindow: async (): Promise<void> => {
+    return await invoke<void>('show_window');
+  },
+
   windowMinimize: async (): Promise<void> => {
+
     return await invoke<void>('window_minimize');
   },
 

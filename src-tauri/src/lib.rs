@@ -283,6 +283,11 @@ fn window_start_drag(window: tauri::Window) {
     let _ = window.start_dragging();
 }
 
+#[tauri::command]
+fn show_window(window: tauri::Window) {
+    let _ = window.show();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -294,6 +299,7 @@ pub fn run() {
             write_file,
             read_binary_file,
             save_binary_file,
+            show_window,
             window_minimize,
             window_toggle_maximize,
             window_close,
@@ -312,6 +318,7 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
 
 
 
