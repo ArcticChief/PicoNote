@@ -104,13 +104,8 @@ class PicoNoteApp {
     } else {
       this.newFile();
     }
-
-    // Reveal app with a smooth fade-in after initial DOM setup is complete
-    requestAnimationFrame(() => {
-      document.getElementById('app')?.classList.add('ready');
-      api.showWindow();
-    });
   }
+
 
 
 
