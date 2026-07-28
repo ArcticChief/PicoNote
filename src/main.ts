@@ -318,6 +318,17 @@ class PicoNoteApp {
       }
     });
 
+    document.getElementById('pane2-file-select')?.addEventListener('change', (e) => {
+      const val = (e.target as HTMLSelectElement).value;
+      if (val) {
+        const tab = this.tabManager.getTabs().find((t) => t.id === val || t.path === val);
+        if (tab) {
+          this.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
+        }
+      }
+    });
+
+
 
     // Tabs Toolbar Right-Click Context Menu
     this.tabsContainer.addEventListener('contextmenu', (e) => {
@@ -1490,10 +1501,19 @@ class PicoNoteApp {
       const opt2 = document.createElement('option');
       opt2.value = t.id;
       opt2.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
-      if (t.id === this.pane2Path || t.path === this.pane2Path) opt2.selected = true;
+      if (this.pane2Path && (t.id === this.pane2Path || t.path === this.pane2Path || t.name === this.pane2Path)) {
+        opt2.selected = true;
+      }
       select2.appendChild(opt2);
     });
+
+    if (activeTab) select1.value = activeTab.id;
+    if (this.pane2Path) {
+      const targetTab = tabs.find((t) => t.id === this.pane2Path || t.path === this.pane2Path || t.name === this.pane2Path);
+      if (targetTab) select2.value = targetTab.id;
+    }
   }
+
 
   private checkSplitPaneReadOnly(): void {
     if (!this.isSplitView || !this.editor2) return;
