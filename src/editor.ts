@@ -17,6 +17,7 @@ export class CodeMirrorEditor {
   private view: EditorView;
   private languageCompartment = new Compartment();
   private themeCompartment = new Compartment();
+  private readOnlyCompartment = new Compartment();
   private onChangeCallback?: (content: string) => void;
   private onCursorCallback?: (line: number, col: number) => void;
   private onOpenLinkCallback?: (target: string, type: 'url' | 'file') => void;
@@ -39,6 +40,8 @@ export class CodeMirrorEditor {
         highlightSelectionMatches(),
         this.themeCompartment.of(oneDark),
         this.languageCompartment.of(markdown({ codeLanguages: languages })),
+        this.readOnlyCompartment.of(EditorState.readOnly.of(false)),
+
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
@@ -240,6 +243,13 @@ export class CodeMirrorEditor {
       effects: this.themeCompartment.reconfigure(isDark ? oneDark : []),
     });
   }
+
+  public setReadOnly(readOnly: boolean): void {
+    this.view.dispatch({
+      effects: this.readOnlyCompartment.reconfigure(EditorState.readOnly.of(readOnly)),
+    });
+  }
+
 
   public setOnChange(callback: (content: string) => void): void {
     this.onChangeCallback = callback;

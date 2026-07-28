@@ -692,8 +692,12 @@ class PicoNoteApp {
     this.editor.setContent(activeTab.content, activeTab.path || activeTab.name);
     if (this.previewVisible) this.updateMarkdownPreview(activeTab.content);
     if (this.outlineVisible) this.updateOutline(activeTab.content);
-    if (this.isSplitView) this.populateSplitFileSelect();
+    if (this.isSplitView) {
+      this.populateSplitFileSelect();
+      this.checkSplitPaneReadOnly();
+    }
   }
+
 
 
 
@@ -1491,6 +1495,36 @@ class PicoNoteApp {
     });
   }
 
+  private checkSplitPaneReadOnly(): void {
+    if (!this.isSplitView || !this.editor2) return;
+
+    const activeTab = this.tabManager.getActiveTab();
+    const isSame = !!(
+      activeTab &&
+      this.pane2Path &&
+      (activeTab.id === this.pane2Path || (activeTab.path && activeTab.path === this.pane2Path) || activeTab.name === this.pane2Path)
+    );
+
+    this.editor2.setReadOnly(isSame);
+
+    const pane2Title = document.querySelector('#editor-pane-2 .split-pane-title') as HTMLElement;
+    if (pane2Title) {
+      if (isSame) {
+        pane2Title.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span style="color:#f87171; font-weight:700;">READ ONLY</span>
+        `;
+        pane2Title.title = 'Same document open in Pane 1. Right pane is set to View Only to prevent edit conflicts.';
+      } else {
+        pane2Title.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+          PANE 2
+        `;
+        pane2Title.title = '';
+      }
+    }
+  }
+
   private async openInPane2(target: { id?: string; path?: string; name: string }): Promise<void> {
     const container2 = document.getElementById('editor-container-2');
     if (!this.editor2 && container2) {
@@ -1518,6 +1552,7 @@ class PicoNoteApp {
 
     if (this.editor2) {
       this.editor2.setContent(content, target.path || target.name);
+      this.checkSplitPaneReadOnly();
       this.editor2.setOnChange((newContent) => {
         const tab = target.id
           ? this.tabManager.getTabs().find((t) => t.id === target.id)
@@ -1582,7 +1617,9 @@ class PicoNoteApp {
       if (targetTab) {
         this.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
       }
+      this.checkSplitPaneReadOnly();
     } else {
+
       if (btnPreview) {
         btnPreview.disabled = false;
         btnPreview.title = 'Toggle Markdown Preview (Ctrl+Shift+M)';
