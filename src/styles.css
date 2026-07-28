@@ -546,6 +546,13 @@ body, html {
   background-color: rgba(129, 140, 248, 0.15) !important;
 }
 
+.tab-group-pill.drag-over {
+  border: 1px dashed var(--accent-primary) !important;
+  background-color: rgba(129, 140, 248, 0.25) !important;
+  transform: scale(1.04);
+}
+
+
 
 /* Tab Groups System */
 .tab-group-pill {

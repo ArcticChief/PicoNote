@@ -719,6 +719,26 @@ class PicoNoteApp {
         this.showGroupContextMenu(e.clientX, e.clientY, g);
       });
 
+      // Drag & Drop onto Group Pill to Join Group
+      pill.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        pill.classList.add('drag-over');
+      });
+
+      pill.addEventListener('dragleave', () => {
+        pill.classList.remove('drag-over');
+      });
+
+      pill.addEventListener('drop', (e) => {
+        e.preventDefault();
+        pill.classList.remove('drag-over');
+        const sourceId = e.dataTransfer?.getData('text/plain');
+        if (sourceId) {
+          this.tabManager.assignTabToGroup(sourceId, g.id);
+        }
+      });
+
       this.tabsContainer.appendChild(pill);
 
       if (!g.collapsed) {
@@ -762,7 +782,7 @@ class PicoNoteApp {
       ${!tab.pinned ? `<span class="tab-close" data-id="${tab.id}">&times;</span>` : ''}
     `;
 
-    // HTML5 Drag & Drop Reordering
+    // HTML5 Drag & Drop Reordering & Grouping
     el.addEventListener('dragstart', (e) => {
       e.dataTransfer?.setData('text/plain', tab.id);
       el.classList.add('dragging');
@@ -784,14 +804,16 @@ class PicoNoteApp {
       const sourceId = e.dataTransfer?.getData('text/plain');
       if (sourceId && sourceId !== tab.id) {
         this.tabManager.reorderTab(sourceId, tab.id);
+        this.tabManager.assignTabToGroup(sourceId, tab.groupId || null);
       }
     });
 
     el.addEventListener('dragend', () => {
-      document.querySelectorAll('.tab').forEach((t) => {
+      document.querySelectorAll('.tab, .tab-group-pill').forEach((t) => {
         t.classList.remove('dragging', 'drag-over');
       });
     });
+
 
     el.addEventListener('click', (e) => {
 
