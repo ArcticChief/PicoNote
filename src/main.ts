@@ -407,19 +407,8 @@ class PicoNoteApp {
             this.tabManager.setActiveTab(tabId);
           }
         }
-
       });
     });
-
-
-
-
-
-
-
-
-
-
 
     // Tabs Toolbar Right-Click Context Menu
     this.tabsContainer.addEventListener('contextmenu', (e) => {
@@ -441,12 +430,9 @@ class PicoNoteApp {
       }
     });
 
-
-
-
-
     // Buttons
     document.getElementById('btn-open-folder')?.addEventListener('click', () => this.openFolderDialog());
+
     document.getElementById('btn-new-file')?.addEventListener('click', () => this.newFile());
 
 
