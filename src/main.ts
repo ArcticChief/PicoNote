@@ -20,8 +20,10 @@ class PicoNoteApp {
   private explorer!: FileExplorer;
   private editor2: CodeMirrorEditor | null = null;
   private isSplitView: boolean = false;
+  private pane2Path: string | null = null;
   private autoSaveEnabled: boolean = true;
   private autoSaveTimer: any = null;
+
 
   private diaryEditor: CodeMirrorEditor | null = null;
   private currentDiaryDate: Date = new Date();
@@ -260,9 +262,49 @@ class PicoNoteApp {
       }
     });
 
+    // Split View Resizer Dragging
+    const splitResizer = document.getElementById('split-resizer');
+    const editorPane1 = document.getElementById('editor-container');
+    let isSplitResizing = false;
+
+    splitResizer?.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isSplitResizing = true;
+      splitResizer.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isSplitResizing && workspace && editorPane1) {
+        const rect = workspace.getBoundingClientRect();
+        const leftOffset = e.clientX - rect.left;
+        const clampedWidth = Math.max(200, Math.min(leftOffset, rect.width - 200));
+        editorPane1.style.width = `${clampedWidth}px`;
+        editorPane1.style.flex = 'none';
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isSplitResizing) {
+        isSplitResizing = false;
+        splitResizer?.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+
+    // Split Pane Controls
+    document.getElementById('btn-close-split')?.addEventListener('click', () => this.toggleSplitView());
+    document.getElementById('split-pane-file-select')?.addEventListener('change', (e) => {
+      const val = (e.target as HTMLSelectElement).value;
+      if (val) this.openInPane2(val);
+    });
+
     // Buttons
     document.getElementById('btn-open-folder')?.addEventListener('click', () => this.openFolderDialog());
     document.getElementById('btn-new-file')?.addEventListener('click', () => this.newFile());
+
 
     document.getElementById('btn-new-folder')?.addEventListener('click', async () => {
       const folder = this.explorer.getCurrentFolder();
@@ -651,7 +693,9 @@ class PicoNoteApp {
     this.editor.setContent(activeTab.content, activeTab.path || activeTab.name);
     if (this.previewVisible) this.updateMarkdownPreview(activeTab.content);
     if (this.outlineVisible) this.updateOutline(activeTab.content);
+    if (this.isSplitView) this.populateSplitFileSelect();
   }
+
 
 
 
@@ -927,9 +971,12 @@ class PicoNoteApp {
       if (this.previewVisible) this.updateMarkdownPreview(content);
       if (this.outlineVisible) this.updateOutline(content);
 
-      if (this.isSplitView && this.editor2) {
-        this.editor2.setContent(content, activeTab.path || '');
+      if (this.isSplitView && this.editor2 && activeTab.path === this.pane2Path) {
+        if (this.editor2.getContent() !== content) {
+          this.editor2.setContent(content, activeTab.path || '');
+        }
       }
+
 
       if (this.autoSaveEnabled && activeTab.path) {
         if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
@@ -1021,27 +1068,84 @@ class PicoNoteApp {
 
 
 
+  private populateSplitFileSelect(): void {
+    const select = document.getElementById('split-pane-file-select') as HTMLSelectElement;
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Select Document to View --</option>';
+
+    const tabs = this.tabManager.getTabs();
+    tabs.forEach((t) => {
+      if (t.path) {
+        const opt = document.createElement('option');
+        opt.value = t.path;
+        opt.textContent = t.name;
+        if (t.path === this.pane2Path) opt.selected = true;
+        select.appendChild(opt);
+      }
+    });
+  }
+
+  private async openInPane2(filePath: string): Promise<void> {
+    this.pane2Path = filePath;
+    const container2 = document.getElementById('editor-container-2');
+    if (!this.editor2 && container2) {
+      this.editor2 = new CodeMirrorEditor(container2);
+      this.editor2.setTheme(this.themeManager.getTheme() === 'dark');
+    }
+
+    if (this.editor2) {
+      try {
+        const content = await api.readFile(filePath);
+        this.editor2.setContent(content, filePath);
+        this.editor2.setOnChange((newContent) => {
+          const tab = this.tabManager.getTabs().find((t) => t.path === filePath);
+          if (tab) {
+            tab.content = newContent;
+            tab.isDirty = true;
+          }
+          const active = this.tabManager.getActiveTab();
+          if (active && active.path === filePath && this.editor) {
+            if (this.editor.getContent() !== newContent) {
+              this.editor.setContent(newContent, filePath);
+            }
+          }
+          if (this.autoSaveEnabled) {
+            api.writeFile(filePath, newContent);
+          }
+        });
+      } catch (err) {
+        console.error('Failed to open file in Pane 2:', err);
+      }
+    }
+  }
+
   private toggleSplitView(): void {
     this.isSplitView = !this.isSplitView;
-    const container2 = document.getElementById('editor-container-2');
+    const pane2 = document.getElementById('editor-pane-2');
     const resizer = document.getElementById('split-resizer');
 
     if (this.isSplitView) {
-      container2?.classList.remove('hidden');
+      pane2?.classList.remove('hidden');
       resizer?.classList.remove('hidden');
-      if (!this.editor2 && container2) {
-        this.editor2 = new CodeMirrorEditor(container2);
-        this.editor2.setTheme(this.themeManager.getTheme() === 'dark');
-      }
+
+      this.populateSplitFileSelect();
+
       const activeTab = this.tabManager.getActiveTab();
-      if (activeTab && this.editor2) {
-        this.editor2.setContent(activeTab.content, activeTab.path || '');
+      if (activeTab && activeTab.path) {
+        this.openInPane2(activeTab.path);
       }
     } else {
-      container2?.classList.add('hidden');
+      pane2?.classList.add('hidden');
       resizer?.classList.add('hidden');
+      const pane1 = document.getElementById('editor-container');
+      if (pane1) {
+        pane1.style.width = '';
+        pane1.style.flex = '1';
+      }
     }
   }
+
 
 }
 

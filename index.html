@@ -164,10 +164,27 @@
       <!-- Workspace Area -->
       <div id="workspace">
         <div id="editor-container" class="editor-pane"></div>
+
+        <!-- Draggable Split View Resizer -->
         <div id="split-resizer" class="resizer hidden" title="Drag to resize split editors"></div>
-        <div id="editor-container-2" class="editor-pane hidden"></div>
+
+        <!-- Split View Pane 2 -->
+        <div id="editor-pane-2" class="editor-split-pane hidden">
+          <div class="split-pane-header">
+            <span class="split-pane-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+              SPLIT PANE
+            </span>
+            <select id="split-pane-file-select" class="split-file-select" title="Switch Split Pane Document">
+              <option value="">-- Select File to View --</option>
+            </select>
+            <button id="btn-close-split" class="preview-close-btn" title="Close Split Pane">✕</button>
+          </div>
+          <div id="editor-container-2" class="editor-pane-body"></div>
+        </div>
 
         <div id="preview-resizer" class="resizer hidden" title="Drag to resize editor & preview"></div>
+
         <div id="md-preview" class="hidden">
           <div class="preview-header">
             <span class="preview-title">
