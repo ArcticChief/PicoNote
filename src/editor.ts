@@ -373,10 +373,8 @@ export class CodeMirrorEditor {
         headOffset = replacement.length;
         break;
       case 'table':
-        replacement = `\n| Header 1 | Header 2 |\n| -------- | -------- |\n| Item 1   | Item 2   |\n`;
-        anchorOffset = replacement.length;
-        headOffset = replacement.length;
-        break;
+        this.insertTable(3, 3);
+        return;
     }
 
     if (replacement) {
@@ -388,11 +386,40 @@ export class CodeMirrorEditor {
     }
   }
 
+  public insertTable(cols: number = 3, rows: number = 3): void {
+
+    const sel = this.view.state.selection.main;
+    let headerRow = '| ';
+    let dividerRow = '| ';
+
+    for (let c = 1; c <= cols; c++) {
+      headerRow += `Header ${c} | `;
+      dividerRow += `-------- | `;
+    }
+
+    let tableText = `\n${headerRow.trim()}\n${dividerRow.trim()}\n`;
+
+    let cellCounter = 1;
+    for (let r = 1; r <= rows; r++) {
+      let rowText = '| ';
+      for (let c = 1; c <= cols; c++) {
+        rowText += `Cell ${cellCounter++} | `;
+      }
+      tableText += `${rowText.trim()}\n`;
+    }
+
+    this.view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: tableText },
+      selection: { anchor: sel.from + tableText.length, head: sel.from + tableText.length },
+    });
+    this.view.focus();
+  }
 
   public destroy(): void {
     this.view.destroy();
   }
 }
+
 
 
 function getLinkAtPos(docText: string, pos: number): DetectedLink | null {

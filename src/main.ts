@@ -289,8 +289,20 @@ class PicoNoteApp {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         const fmt = (e.currentTarget as HTMLElement).getAttribute('data-fmt');
-        if (fmt) this.editor.applyFormatting(fmt);
+        if (fmt === 'table') {
+          const colsInput = prompt('Enter number of columns:', '3');
+          if (colsInput === null) return;
+          const rowsInput = prompt('Enter number of rows:', '3');
+          if (rowsInput === null) return;
+
+          const cols = Math.max(1, Math.min(parseInt(colsInput, 10) || 3, 20));
+          const rows = Math.max(1, Math.min(parseInt(rowsInput, 10) || 3, 50));
+          this.editor.insertTable(cols, rows);
+        } else if (fmt) {
+          this.editor.applyFormatting(fmt);
+        }
       });
+
     });
 
 
