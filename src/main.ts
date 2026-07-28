@@ -338,63 +338,40 @@ class PicoNoteApp {
       }
     });
 
-    // Drag & Drop File / Tab onto Split Panes
-    const workspaceContainer = document.getElementById('workspace');
-    const pane1 = document.getElementById('editor-pane-1');
-    const pane2 = document.getElementById('editor-pane-2');
+    // Dedicated Sub-Header & Toolbar Button Drop Targets for Split Panes
+    const header1 = document.getElementById('pane1-header');
+    const header2 = document.getElementById('pane2-header');
+    const btnSplitBtn = document.getElementById('btn-split-editor');
 
-    if (workspaceContainer) {
-      const handleDragOver = (e: DragEvent) => {
+    [
+      { element: header1, isPane2: false },
+      { element: header2, isPane2: true },
+      { element: btnSplitBtn, isPane2: true },
+    ].forEach(({ element, isPane2 }) => {
+      if (!element) return;
+
+      element.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (e.dataTransfer) {
           e.dataTransfer.dropEffect = 'copy';
         }
+        element.classList.add('drop-header-active');
+      });
 
-        const targetEl = document.elementFromPoint(e.clientX, e.clientY);
-        const isPane2 = !!(
-          targetEl?.closest('#editor-pane-2') ||
-          (this.isSplitView && pane1 && e.clientX > pane1.getBoundingClientRect().right)
-        );
+      element.addEventListener('dragleave', (e) => {
+        e.stopPropagation();
+        element.classList.remove('drop-header-active');
+      });
 
-        if (isPane2) {
-          pane1?.classList.remove('drag-over-pane');
-          pane2?.classList.add('drag-over-pane');
-        } else {
-          pane2?.classList.remove('drag-over-pane');
-          pane1?.classList.add('drag-over-pane');
-        }
-      };
-
-      const handleDragLeave = (e: DragEvent) => {
-        const rect = workspaceContainer.getBoundingClientRect();
-        if (
-          e.clientX <= rect.left ||
-          e.clientX >= rect.right ||
-          e.clientY <= rect.top ||
-          e.clientY >= rect.bottom
-        ) {
-          pane1?.classList.remove('drag-over-pane');
-          pane2?.classList.remove('drag-over-pane');
-        }
-      };
-
-      const handleDrop = async (e: DragEvent) => {
+      element.addEventListener('drop', async (e) => {
         e.preventDefault();
         e.stopPropagation();
-
-        pane1?.classList.remove('drag-over-pane');
-        pane2?.classList.remove('drag-over-pane');
+        element.classList.remove('drop-header-active');
 
         const explorerPath = getDraggedExplorerItemPath();
         const dropData = explorerPath || e.dataTransfer?.getData('text/plain');
         if (!dropData) return;
-
-        const targetEl = document.elementFromPoint(e.clientX, e.clientY);
-        const isPane2 = !!(
-          targetEl?.closest('#editor-pane-2') ||
-          (this.isSplitView && pane1 && e.clientX > pane1.getBoundingClientRect().right)
-        );
 
         const tabById = this.tabManager.getTabs().find((t) => t.id === dropData || t.path === dropData);
         let filePath = tabById ? (tabById.path || null) : dropData;
@@ -411,7 +388,7 @@ class PicoNoteApp {
               const t = this.tabManager.openTab(filePath, filename, content);
               tabId = t.id;
             } catch (err) {
-              console.error('Failed to read dropped file for pane:', err);
+              console.error('Failed to read dropped file:', err);
               return;
             }
           }
@@ -431,12 +408,9 @@ class PicoNoteApp {
             this.tabManager.setActiveTab(tabId);
           }
         }
-      };
+      });
+    });
 
-      workspaceContainer.addEventListener('dragover', handleDragOver, true);
-      workspaceContainer.addEventListener('dragleave', handleDragLeave, true);
-      workspaceContainer.addEventListener('drop', handleDrop, true);
-    }
 
 
 

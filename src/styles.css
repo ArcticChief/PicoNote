@@ -1092,6 +1092,16 @@ body, html {
   transition: all 0.15s ease;
 }
 
+.split-pane-header.drop-header-active,
+#btn-split-editor.drop-header-active {
+  background: var(--bg-hover) !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.3) !important;
+  outline: 2px dashed var(--accent-primary) !important;
+  outline-offset: -2px;
+}
+
+
 
 
 
