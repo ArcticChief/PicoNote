@@ -328,6 +328,15 @@ class PicoNoteApp {
       }
     });
 
+    document.getElementById('btn-sync-pane2')?.addEventListener('click', () => this.syncPane2ToLatest());
+    document.getElementById('pane2-parity-badge')?.addEventListener('click', () => {
+      if (document.getElementById('pane2-parity-badge')?.classList.contains('out-of-sync')) {
+        this.syncPane2ToLatest();
+      }
+    });
+
+
+
 
 
     // Tabs Toolbar Right-Click Context Menu
@@ -1452,10 +1461,8 @@ class PicoNoteApp {
       if (this.previewVisible) this.updateMarkdownPreview(content);
       if (this.outlineVisible) this.updateOutline(content);
 
-      if (this.isSplitView && this.editor2 && activeTab.path === this.pane2Path) {
-        if (this.editor2.getContent() !== content) {
-          this.editor2.setContent(content, activeTab.path || '');
-        }
+      if (this.isSplitView && this.editor2) {
+        this.checkSplitPaneReadOnly();
       }
 
 
@@ -1476,9 +1483,14 @@ class PicoNoteApp {
     }
   }
 
-
-
-
+  private syncPane2ToLatest(): void {
+    if (!this.isSplitView || !this.editor2) return;
+    const activeTab = this.tabManager.getActiveTab();
+    if (activeTab) {
+      this.editor2.setContent(activeTab.content, activeTab.path || activeTab.name);
+      this.checkSplitPaneReadOnly();
+    }
+  }
 
   private populateSplitFileSelect(): void {
     const select1 = document.getElementById('pane1-file-select') as HTMLSelectElement;
@@ -1514,7 +1526,6 @@ class PicoNoteApp {
     }
   }
 
-
   private checkSplitPaneReadOnly(): void {
     if (!this.isSplitView || !this.editor2) return;
 
@@ -1527,15 +1538,47 @@ class PicoNoteApp {
 
     this.editor2.setReadOnly(isSame);
 
+    const badge = document.getElementById('pane2-parity-badge');
+    const syncBtn = document.getElementById('btn-sync-pane2');
     const pane2Title = document.querySelector('#editor-pane-2 .split-pane-title') as HTMLElement;
-    if (pane2Title) {
-      if (isSame) {
+
+    if (isSame && activeTab) {
+      const p1Content = activeTab.content;
+      const p2Content = this.editor2.getContent();
+      const inSync = p1Content === p2Content;
+
+      if (badge) {
+        badge.classList.remove('hidden');
+        if (inSync) {
+          badge.className = 'split-parity-badge in-sync';
+          badge.innerHTML = `<span class="parity-dot"></span><span class="parity-text">In Sync</span>`;
+          badge.title = 'Pane 2 snapshot is identical to Pane 1 (Latest)';
+        } else {
+          badge.className = 'split-parity-badge out-of-sync';
+          badge.innerHTML = `<span class="parity-dot"></span><span class="parity-text">Out of Sync</span>`;
+          badge.title = 'Pane 1 has new changes. Click to sync Pane 2 to latest version.';
+        }
+      }
+
+      if (syncBtn) {
+        if (inSync) {
+          syncBtn.classList.add('hidden');
+        } else {
+          syncBtn.classList.remove('hidden');
+        }
+      }
+
+      if (pane2Title) {
         pane2Title.innerHTML = `
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-          <span style="color:#f87171; font-weight:700;">READ ONLY</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span style="color:#fbbf24; font-weight:700;">SNAPSHOT</span>
         `;
-        pane2Title.title = 'Same document open in Pane 1. Right pane is set to View Only to prevent edit conflicts.';
-      } else {
+        pane2Title.title = 'Pane 2 is a static reference snapshot. Click Sync to refresh to latest version.';
+      }
+    } else {
+      if (badge) badge.classList.add('hidden');
+      if (syncBtn) syncBtn.classList.add('hidden');
+      if (pane2Title) {
         pane2Title.innerHTML = `
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
           PANE 2
@@ -1546,6 +1589,7 @@ class PicoNoteApp {
   }
 
   private async openInPane2(target: { id?: string; path?: string; name: string }): Promise<void> {
+
     const container2 = document.getElementById('editor-container-2');
     if (!this.editor2 && container2) {
       this.editor2 = new CodeMirrorEditor(container2);

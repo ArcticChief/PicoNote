@@ -1014,6 +1014,78 @@ body, html {
   padding: 6px 10px;
 }
 
+/* Split Parity & Manual Sync Component */
+.split-parity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  user-select: none;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.split-parity-badge.in-sync {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+}
+
+.split-parity-badge.out-of-sync {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  cursor: pointer;
+}
+
+.split-parity-badge .parity-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.split-parity-badge.in-sync .parity-dot {
+  background-color: #34d399;
+}
+
+.split-parity-badge.out-of-sync .parity-dot {
+  background-color: #fbbf24;
+  animation: pulse-sync-dot 1.4s infinite;
+}
+
+@keyframes pulse-sync-dot {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+.split-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.split-sync-btn:hover {
+  background: var(--accent-gradient);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+
+
 
 .editor-pane-body {
   flex: 1;
