@@ -536,8 +536,94 @@ body, html {
   line-height: 1;
 }
 
+.tab.dragging {
+  opacity: 0.4;
+  transform: scale(0.96);
+}
+
+.tab.drag-over {
+  border-left: 2px solid var(--accent-primary) !important;
+  background-color: rgba(129, 140, 248, 0.15) !important;
+}
+
+
+/* Tab Groups System */
+.tab-group-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: calc(100% - 6px);
+  margin-top: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.tab-group-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.tab-group-pill.color-purple { border-top: 2px solid #818cf8; background: rgba(129, 140, 248, 0.1); }
+.tab-group-pill.color-blue   { border-top: 2px solid #38bdf8; background: rgba(56, 189, 248, 0.1); }
+.tab-group-pill.color-emerald{ border-top: 2px solid #34d399; background: rgba(52, 211, 153, 0.1); }
+.tab-group-pill.color-amber  { border-top: 2px solid #fbbf24; background: rgba(251, 191, 36, 0.1); }
+.tab-group-pill.color-rose   { border-top: 2px solid #f43f5e; background: rgba(244, 63, 94, 0.1); }
+
+.group-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.group-dot.color-purple { background: #818cf8; box-shadow: 0 0 6px rgba(129, 140, 248, 0.6); }
+.group-dot.color-blue   { background: #38bdf8; box-shadow: 0 0 6px rgba(56, 189, 248, 0.6); }
+.group-dot.color-emerald{ background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.6); }
+.group-dot.color-amber  { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.6); }
+.group-dot.color-rose   { background: #f43f5e; box-shadow: 0 0 6px rgba(244, 63, 94, 0.6); }
+
+.group-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-count {
+  font-size: 10px;
+  opacity: 0.6;
+  font-weight: 500;
+}
+
+.group-arrow {
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.tab-group-pill.collapsed .group-arrow {
+  transform: rotate(-90deg);
+}
+
+.tab.in-group-purple { border-top: 2px solid rgba(129, 140, 248, 0.7); }
+.tab.in-group-blue   { border-top: 2px solid rgba(56, 189, 248, 0.7); }
+.tab.in-group-emerald{ border-top: 2px solid rgba(52, 211, 153, 0.7); }
+.tab.in-group-amber  { border-top: 2px solid rgba(251, 191, 36, 0.7); }
+.tab.in-group-rose   { border-top: 2px solid rgba(244, 63, 94, 0.7); }
+
+
 .tab-close:hover {
   background-color: rgba(255, 255, 255, 0.15);
+
   color: var(--text-primary);
 }
 

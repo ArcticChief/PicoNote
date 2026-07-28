@@ -1,14 +1,15 @@
-import { Tab } from './types';
+import { Tab, TabGroup } from './types';
 
 export class TabManager {
   private tabs: Tab[] = [];
+  private groups: TabGroup[] = [];
   private activeTabId: string | null = null;
   private onTabChange?: (activeTab: Tab | null) => void;
-  private onTabsUpdated?: (tabs: Tab[]) => void;
+  private onTabsUpdated?: (tabs: Tab[], groups: TabGroup[]) => void;
 
   constructor(
     onTabChange?: (activeTab: Tab | null) => void,
-    onTabsUpdated?: (tabs: Tab[]) => void
+    onTabsUpdated?: (tabs: Tab[], groups: TabGroup[]) => void
   ) {
     this.onTabChange = onTabChange;
     this.onTabsUpdated = onTabsUpdated;
@@ -18,9 +19,80 @@ export class TabManager {
     return this.tabs;
   }
 
+  public getGroups(): TabGroup[] {
+    return this.groups;
+  }
+
+  public createGroup(name: string, color: string = 'purple'): TabGroup {
+    const id = 'group-' + Math.random().toString(36).substring(2, 9);
+    const newGroup: TabGroup = { id, name, color, collapsed: false };
+    this.groups.push(newGroup);
+    this.notify();
+    return newGroup;
+  }
+
+  public renameGroup(groupId: string, name: string): void {
+    const group = this.groups.find((g) => g.id === groupId);
+    if (group) {
+      group.name = name;
+      this.notify();
+    }
+  }
+
+  public setGroupColor(groupId: string, color: string): void {
+    const group = this.groups.find((g) => g.id === groupId);
+    if (group) {
+      group.color = color;
+      this.notify();
+    }
+  }
+
+  public toggleGroupCollapse(groupId: string): void {
+    const group = this.groups.find((g) => g.id === groupId);
+    if (group) {
+      group.collapsed = !group.collapsed;
+      this.notify();
+    }
+  }
+
+  public removeGroup(groupId: string, closeTabs: boolean = false): void {
+    if (closeTabs) {
+      this.tabs = this.tabs.filter((t) => t.groupId !== groupId);
+    } else {
+      this.tabs.forEach((t) => {
+        if (t.groupId === groupId) t.groupId = null;
+      });
+    }
+    this.groups = this.groups.filter((g) => g.id !== groupId);
+    if (!this.tabs.some((t) => t.id === this.activeTabId)) {
+      this.activeTabId = this.tabs.length > 0 ? this.tabs[0].id : null;
+    }
+    this.notify();
+  }
+
+  public assignTabToGroup(tabId: string, groupId: string | null): void {
+    const tab = this.tabs.find((t) => t.id === tabId);
+    if (tab) {
+      tab.groupId = groupId;
+      this.notify();
+    }
+  }
+
+  public reorderTab(sourceId: string, targetId: string): void {
+    const sourceIdx = this.tabs.findIndex((t) => t.id === sourceId);
+    const targetIdx = this.tabs.findIndex((t) => t.id === targetId);
+    if (sourceIdx !== -1 && targetIdx !== -1 && sourceIdx !== targetIdx) {
+      const [movedTab] = this.tabs.splice(sourceIdx, 1);
+      this.tabs.splice(targetIdx, 0, movedTab);
+      this.notify();
+    }
+  }
+
   public getActiveTab(): Tab | null {
+
     return this.tabs.find((t) => t.id === this.activeTabId) || null;
   }
+
 
   public openTab(path: string | null, name: string, content: string): Tab {
     // Check if already open by path
@@ -127,7 +199,7 @@ export class TabManager {
 
     active.content = content;
     active.isDirty = active.content !== active.savedContent;
-    if (this.onTabsUpdated) this.onTabsUpdated(this.tabs);
+    if (this.onTabsUpdated) this.onTabsUpdated(this.tabs, this.groups);
   }
 
   public markActiveSaved(newPath?: string, newName?: string): void {
@@ -145,9 +217,10 @@ export class TabManager {
   }
 
   private notify(): void {
-    if (this.onTabsUpdated) this.onTabsUpdated(this.tabs);
+    if (this.onTabsUpdated) this.onTabsUpdated(this.tabs, this.groups);
     if (this.onTabChange) this.onTabChange(this.getActiveTab());
   }
+
 
   private detectLanguage(name: string): string {
     const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')).toLowerCase() : '';

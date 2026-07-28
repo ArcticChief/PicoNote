@@ -7,7 +7,8 @@ import { CommandPalette } from './palette';
 import { SpotlightSearch } from './spotlight';
 import { TabManager } from './tabs';
 import { ThemeManager } from './theme';
-import { Tab } from './types';
+import { Tab, TabGroup } from './types';
+
 
 
 
@@ -68,8 +69,9 @@ class PicoNoteApp {
 
     this.tabManager = new TabManager(
       (activeTab) => this.onActiveTabChanged(activeTab),
-      (tabs) => this.renderTabs(tabs)
+      (tabs, groups) => this.renderTabs(tabs, groups)
     );
+
 
     this.explorer = new FileExplorer(
       'file-explorer',
@@ -464,7 +466,16 @@ class PicoNoteApp {
   private setupCommands(): void {
     this.palette.registerCommands([
       { id: 'spotlight-search', label: 'Workspace: Global Spotlight Search...', shortcut: 'Ctrl+K', action: () => this.spotlight.show() },
+      { id: 'create-tab-group', label: 'Tabs: Create New Tab Group...', action: () => {
+        const active = this.tabManager.getActiveTab();
+        const grpName = prompt('Enter new Tab Group name:');
+        if (grpName) {
+          const grp = this.tabManager.createGroup(grpName);
+          if (active) this.tabManager.assignTabToGroup(active.id, grp.id);
+        }
+      }},
       { id: 'split-view', label: 'View: Toggle Split Editor Pane', shortcut: 'Ctrl+\\', action: () => this.toggleSplitView() },
+
 
       { id: 'set-main-folder', label: 'Workspace: Set Main Folder (Entry Point)...', shortcut: 'Ctrl+Shift+O', action: () => this.setMainWorkspaceFolder() },
       { id: 'new-file', label: 'File: New File', shortcut: 'Ctrl+N', action: () => this.newFile() },
@@ -675,7 +686,7 @@ class PicoNoteApp {
     return fileSvg;
   }
 
-  private renderTabs(tabs: Tab[]): void {
+  private renderTabs(tabs: Tab[], groups: TabGroup[] = []): void {
     this.tabsContainer.innerHTML = '';
     const active = this.tabManager.getActiveTab();
 
@@ -684,51 +695,122 @@ class PicoNoteApp {
       allTabsText.textContent = `Tabs (${tabs.length})`;
     }
 
+    // 1. Render Group Pills and their assigned tabs
+    groups.forEach((g) => {
+      const groupTabs = tabs.filter((t) => t.groupId === g.id);
 
-    tabs.forEach((tab) => {
-      const el = document.createElement('div');
-      el.className = `tab ${active && active.id === tab.id ? 'active' : ''} ${tab.pinned ? 'pinned' : ''}`;
-      el.setAttribute('title', tab.path || tab.name);
-      if (tab.colorTag) {
-        el.setAttribute('data-color-tag', tab.colorTag);
-      }
-
-      const icon = this.getTabFileIcon(tab.name);
-      el.innerHTML = `
-        <span class="tab-icon">${icon}</span>
-        <span class="tab-title">${tab.name}</span>
-        ${tab.pinned ? '<span class="tab-pin-icon" title="Pinned">📌</span>' : ''}
-        ${tab.isDirty ? '<span class="tab-dot" title="Unsaved changes"></span>' : ''}
-        ${!tab.pinned ? `<span class="tab-close" data-id="${tab.id}">&times;</span>` : ''}
+      const pill = document.createElement('div');
+      pill.className = `tab-group-pill color-${g.color} ${g.collapsed ? 'collapsed' : ''}`;
+      pill.title = `Group: ${g.name} (${groupTabs.length} tabs) — Click to ${g.collapsed ? 'expand' : 'collapse'}, Right-click to manage`;
+      pill.innerHTML = `
+        <span class="group-dot color-${g.color}"></span>
+        <span class="group-name">${g.name}</span>
+        <span class="group-count">(${groupTabs.length})</span>
+        <span class="group-arrow">▾</span>
       `;
 
-
-      el.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        if (target.classList.contains('tab-close')) {
-          e.stopPropagation();
-          this.tabManager.closeTab(tab.id);
-        } else {
-          this.tabManager.setActiveTab(tab.id);
-        }
+      pill.addEventListener('click', () => {
+        this.tabManager.toggleGroupCollapse(g.id);
       });
 
-      el.addEventListener('contextmenu', (e) => {
+      pill.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.showTabContextMenu(e.clientX, e.clientY, tab);
+        this.showGroupContextMenu(e.clientX, e.clientY, g);
       });
 
-      this.tabsContainer.appendChild(el);
+      this.tabsContainer.appendChild(pill);
+
+      if (!g.collapsed) {
+        groupTabs.forEach((tab) => {
+          this.appendTabElement(tab, active, g.color);
+        });
+      }
     });
 
-    // Auto-scroll active tab into view so active tab is never hidden off-screen
+    // 2. Render Ungrouped Tabs
+    const ungroupedTabs = tabs.filter((t) => !t.groupId);
+    ungroupedTabs.forEach((tab) => {
+      this.appendTabElement(tab, active);
+    });
+
+    // Auto-scroll active tab into view
     setTimeout(() => {
       const activeEl = this.tabsContainer.querySelector('.tab.active') as HTMLElement;
       if (activeEl) {
         activeEl.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
       }
     }, 50);
+  }
+
+  private appendTabElement(tab: Tab, active: Tab | null, groupColor?: string): void {
+    const el = document.createElement('div');
+    const inGroupClass = groupColor ? `in-group-${groupColor}` : '';
+    el.className = `tab ${active && active.id === tab.id ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${inGroupClass}`;
+    el.setAttribute('title', tab.path || tab.name);
+    el.setAttribute('draggable', 'true');
+    if (tab.colorTag) {
+      el.setAttribute('data-color-tag', tab.colorTag);
+    }
+
+    const icon = this.getTabFileIcon(tab.name);
+    el.innerHTML = `
+      <span class="tab-icon">${icon}</span>
+      <span class="tab-title">${tab.name}</span>
+      ${tab.pinned ? '<span class="tab-pin-icon" title="Pinned">📌</span>' : ''}
+      ${tab.isDirty ? '<span class="tab-dot" title="Unsaved changes"></span>' : ''}
+      ${!tab.pinned ? `<span class="tab-close" data-id="${tab.id}">&times;</span>` : ''}
+    `;
+
+    // HTML5 Drag & Drop Reordering
+    el.addEventListener('dragstart', (e) => {
+      e.dataTransfer?.setData('text/plain', tab.id);
+      el.classList.add('dragging');
+    });
+
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drag-over');
+    });
+
+    el.addEventListener('dragleave', () => {
+      el.classList.remove('drag-over');
+    });
+
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const sourceId = e.dataTransfer?.getData('text/plain');
+      if (sourceId && sourceId !== tab.id) {
+        this.tabManager.reorderTab(sourceId, tab.id);
+      }
+    });
+
+    el.addEventListener('dragend', () => {
+      document.querySelectorAll('.tab').forEach((t) => {
+        t.classList.remove('dragging', 'drag-over');
+      });
+    });
+
+    el.addEventListener('click', (e) => {
+
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('tab-close')) {
+        e.stopPropagation();
+        this.tabManager.closeTab(tab.id);
+      } else {
+        this.tabManager.setActiveTab(tab.id);
+      }
+    });
+
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.showTabContextMenu(e.clientX, e.clientY, tab);
+    });
+
+    this.tabsContainer.appendChild(el);
   }
 
   private renderAllTabsDropdown(query: string = ''): void {
@@ -784,11 +866,27 @@ class PicoNoteApp {
     const existing = document.getElementById('context-menu');
     if (existing) existing.remove();
 
+    const groups = this.tabManager.getGroups();
+
     const menu = document.createElement('div');
     menu.id = 'context-menu';
 
+    let groupsHtml = '';
+    if (groups.length > 0) {
+      groupsHtml += `<div class="ctx-divider"></div>`;
+      groups.forEach((g) => {
+        if (tab.groupId !== g.id) {
+          groupsHtml += `<div class="ctx-item tab-ctx-assign-grp" data-grp-id="${g.id}">📂 Move to Group: ${g.name}</div>`;
+        }
+      });
+    }
+
     menu.innerHTML = `
       <div class="ctx-item" id="tab-ctx-pin">${tab.pinned ? '📌 Unpin Tab' : '📌 Pin Tab'}</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" id="tab-ctx-new-grp">📁 Create New Tab Group...</div>
+      ${tab.groupId ? '<div class="ctx-item" id="tab-ctx-ungrp">🚫 Remove from Group</div>' : ''}
+      ${groupsHtml}
       <div class="ctx-divider"></div>
       <div class="ctx-item" id="tab-ctx-color-purple">🟣 Purple Tag</div>
       <div class="ctx-item" id="tab-ctx-color-blue">🔵 Blue Tag</div>
@@ -823,10 +921,31 @@ class PicoNoteApp {
     const closeCtx = () => menu.remove();
     setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
 
-
     menu.querySelector('#tab-ctx-pin')?.addEventListener('click', () => {
       this.tabManager.togglePin(tab.id);
     });
+
+    menu.querySelector('#tab-ctx-new-grp')?.addEventListener('click', () => {
+      const groupName = prompt('Enter new Tab Group name:');
+      if (groupName) {
+        const grp = this.tabManager.createGroup(groupName);
+        this.tabManager.assignTabToGroup(tab.id, grp.id);
+      }
+    });
+
+    menu.querySelector('#tab-ctx-ungrp')?.addEventListener('click', () => {
+      this.tabManager.assignTabToGroup(tab.id, null);
+    });
+
+    menu.querySelectorAll('.tab-ctx-assign-grp').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const grpId = (e.currentTarget as HTMLElement).getAttribute('data-grp-id');
+        if (grpId) {
+          this.tabManager.assignTabToGroup(tab.id, grpId);
+        }
+      });
+    });
+
     menu.querySelector('#tab-ctx-color-purple')?.addEventListener('click', () => {
       this.tabManager.setColorTag(tab.id, 'purple');
     });
@@ -855,6 +974,85 @@ class PicoNoteApp {
       this.tabManager.closeTab(tab.id);
     });
   }
+
+  private showGroupContextMenu(x: number, y: number, group: TabGroup): void {
+    const existing = document.getElementById('context-menu');
+    if (existing) existing.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+
+    menu.innerHTML = `
+      <div class="ctx-item" id="grp-ctx-rename">✏️ Rename Group...</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" id="grp-ctx-color-purple">🟣 Purple Accent</div>
+      <div class="ctx-item" id="grp-ctx-color-blue">🔵 Blue Accent</div>
+      <div class="ctx-item" id="grp-ctx-color-emerald">🟢 Emerald Accent</div>
+      <div class="ctx-item" id="grp-ctx-color-amber">🟠 Amber Accent</div>
+      <div class="ctx-item" id="grp-ctx-color-rose">🔴 Rose Accent</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" id="grp-ctx-toggle">${group.collapsed ? '▸ Expand Group' : '▾ Collapse Group'}</div>
+      <div class="ctx-item" id="grp-ctx-ungroup-all">📂 Ungroup All Tabs</div>
+      <div class="ctx-item danger" id="grp-ctx-close-tabs">❌ Close All Tabs in Group</div>
+    `;
+
+    document.body.appendChild(menu);
+
+    const rect = menu.getBoundingClientRect();
+    const margin = 10;
+
+    let posX = x;
+    let posY = y;
+
+    if (posX + rect.width > window.innerWidth - margin) {
+      posX = window.innerWidth - rect.width - margin;
+    }
+    if (posY + rect.height > window.innerHeight - margin) {
+      posY = window.innerHeight - rect.height - margin;
+    }
+
+    menu.style.left = `${Math.max(margin, posX)}px`;
+    menu.style.top = `${Math.max(margin, posY)}px`;
+
+    const closeCtx = () => menu.remove();
+    setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
+
+    menu.querySelector('#grp-ctx-rename')?.addEventListener('click', () => {
+      const newName = prompt('Enter new group name:', group.name);
+      if (newName) {
+        this.tabManager.renameGroup(group.id, newName);
+      }
+    });
+
+    menu.querySelector('#grp-ctx-color-purple')?.addEventListener('click', () => {
+      this.tabManager.setGroupColor(group.id, 'purple');
+    });
+    menu.querySelector('#grp-ctx-color-blue')?.addEventListener('click', () => {
+      this.tabManager.setGroupColor(group.id, 'blue');
+    });
+    menu.querySelector('#grp-ctx-color-emerald')?.addEventListener('click', () => {
+      this.tabManager.setGroupColor(group.id, 'emerald');
+    });
+    menu.querySelector('#grp-ctx-color-amber')?.addEventListener('click', () => {
+      this.tabManager.setGroupColor(group.id, 'amber');
+    });
+    menu.querySelector('#grp-ctx-color-rose')?.addEventListener('click', () => {
+      this.tabManager.setGroupColor(group.id, 'rose');
+    });
+
+    menu.querySelector('#grp-ctx-toggle')?.addEventListener('click', () => {
+      this.tabManager.toggleGroupCollapse(group.id);
+    });
+
+    menu.querySelector('#grp-ctx-ungroup-all')?.addEventListener('click', () => {
+      this.tabManager.removeGroup(group.id, false);
+    });
+
+    menu.querySelector('#grp-ctx-close-tabs')?.addEventListener('click', () => {
+      this.tabManager.removeGroup(group.id, true);
+    });
+  }
+
 
 
   private updateMarkdownPreview(content: string): void {

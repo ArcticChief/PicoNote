@@ -21,6 +21,13 @@ export interface SearchResult {
   match_type: string;
 }
 
+export interface TabGroup {
+  id: string;
+  name: string;
+  color: string;
+  collapsed: boolean;
+}
+
 export interface Tab {
   id: string;
   path: string | null;
@@ -31,9 +38,11 @@ export interface Tab {
   language: string;
   pinned?: boolean;
   colorTag?: string;
+  groupId?: string | null;
   scrollPosition?: number;
   cursorOffset?: number;
 }
+
 
 
 export interface TocItem {
