@@ -534,39 +534,59 @@ body, html {
 .tab-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding-left: 6px;
+  gap: 6px;
+  padding-left: 8px;
+}
+
+.tb-segmented-group {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.tb-group-divider {
+  width: 1px;
+  height: 16px;
+  background-color: var(--border-color);
+  opacity: 0.5;
+  margin: 0 2px;
 }
 
 .tb-btn {
   background: transparent;
-  border: 1px solid transparent;
+  border: none;
   color: var(--text-muted);
-  font-size: 12px;
-  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 5px;
   transition: all 0.15s ease;
+  height: 24px;
 }
 
 .tb-btn:hover {
-  background-color: var(--bg-hover);
+  background-color: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
-  border-color: var(--border-color);
 }
 
 .tb-btn.active {
-  background-color: var(--bg-tertiary);
-  color: var(--accent-primary);
-  border-color: var(--border-focus);
+  background-color: rgba(129, 140, 248, 0.2);
+  color: #818cf8;
+  font-weight: 600;
 }
 
 .tb-btn.icon-only {
-  padding: 4px 6px;
+  padding: 3px 6px;
 }
+
 
 /* All Open Tabs Dropdown Menu */
 #all-tabs-dropdown {

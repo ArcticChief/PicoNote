@@ -291,11 +291,16 @@ class PicoNoteApp {
     });
 
     // Split Pane Controls
-    document.getElementById('btn-close-split')?.addEventListener('click', () => this.toggleSplitView());
     document.getElementById('split-pane-file-select')?.addEventListener('change', (e) => {
       const val = (e.target as HTMLSelectElement).value;
-      if (val) this.openInPane2(val);
+      if (val) {
+        const tab = this.tabManager.getTabs().find((t) => t.id === val || t.path === val);
+        if (tab) {
+          this.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
+        }
+      }
     });
+
 
     // Buttons
     document.getElementById('btn-open-folder')?.addEventListener('click', () => this.openFolderDialog());
@@ -948,47 +953,62 @@ class PicoNoteApp {
 
     const tabs = this.tabManager.getTabs();
     tabs.forEach((t) => {
-      if (t.path) {
-        const opt = document.createElement('option');
-        opt.value = t.path;
-        opt.textContent = t.name;
-        if (t.path === this.pane2Path) opt.selected = true;
-        select.appendChild(opt);
-      }
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
+      if (t.id === this.pane2Path || t.path === this.pane2Path) opt.selected = true;
+      select.appendChild(opt);
     });
   }
 
-  private async openInPane2(filePath: string): Promise<void> {
-    this.pane2Path = filePath;
+  private async openInPane2(target: { id?: string; path?: string; name: string }): Promise<void> {
     const container2 = document.getElementById('editor-container-2');
     if (!this.editor2 && container2) {
       this.editor2 = new CodeMirrorEditor(container2);
       this.editor2.setTheme(this.themeManager.getTheme() === 'dark');
     }
 
-    if (this.editor2) {
+    this.pane2Path = target.id || target.path || target.name;
+
+    let content = '';
+    const existingTab = target.id
+      ? this.tabManager.getTabs().find((t) => t.id === target.id)
+      : this.tabManager.getTabs().find((t) => t.path === target.path);
+
+    if (existingTab) {
+      content = existingTab.content;
+    } else if (target.path) {
       try {
-        const content = await api.readFile(filePath);
-        this.editor2.setContent(content, filePath);
-        this.editor2.setOnChange((newContent) => {
-          const tab = this.tabManager.getTabs().find((t) => t.path === filePath);
-          if (tab) {
-            tab.content = newContent;
-            tab.isDirty = true;
-          }
-          const active = this.tabManager.getActiveTab();
-          if (active && active.path === filePath && this.editor) {
-            if (this.editor.getContent() !== newContent) {
-              this.editor.setContent(newContent, filePath);
-            }
-          }
-          if (this.autoSaveEnabled) {
-            api.writeFile(filePath, newContent);
-          }
-        });
+        content = await api.readFile(target.path);
       } catch (err) {
-        console.error('Failed to open file in Pane 2:', err);
+        console.error('Failed to read file for Pane 2:', err);
+        return;
       }
+    }
+
+    if (this.editor2) {
+      this.editor2.setContent(content, target.path || target.name);
+      this.editor2.setOnChange((newContent) => {
+        const tab = target.id
+          ? this.tabManager.getTabs().find((t) => t.id === target.id)
+          : this.tabManager.getTabs().find((t) => t.path === target.path);
+
+        if (tab) {
+          tab.content = newContent;
+          tab.isDirty = true;
+        }
+
+        const active = this.tabManager.getActiveTab();
+        if (active && (active.id === target.id || (active.path && active.path === target.path))) {
+          if (this.editor.getContent() !== newContent) {
+            this.editor.setContent(newContent, target.path || target.name);
+          }
+        }
+
+        if (this.autoSaveEnabled && target.path) {
+          api.writeFile(target.path, newContent);
+        }
+      });
     }
   }
 
@@ -996,20 +1016,28 @@ class PicoNoteApp {
     this.isSplitView = !this.isSplitView;
     const pane2 = document.getElementById('editor-pane-2');
     const resizer = document.getElementById('split-resizer');
+    const btn = document.getElementById('btn-split-editor');
 
     if (this.isSplitView) {
       pane2?.classList.remove('hidden');
       resizer?.classList.remove('hidden');
+      btn?.classList.add('active');
 
       this.populateSplitFileSelect();
 
+      const tabs = this.tabManager.getTabs();
       const activeTab = this.tabManager.getActiveTab();
-      if (activeTab && activeTab.path) {
-        this.openInPane2(activeTab.path);
+
+      const secondTab = tabs.find((t) => t.id !== activeTab?.id);
+      const targetTab = secondTab || activeTab;
+
+      if (targetTab) {
+        this.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
       }
     } else {
       pane2?.classList.add('hidden');
       resizer?.classList.add('hidden');
+      btn?.classList.remove('active');
       const pane1 = document.getElementById('editor-container');
       if (pane1) {
         pane1.style.width = '';
@@ -1017,6 +1045,7 @@ class PicoNoteApp {
       }
     }
   }
+
 
 
 }
