@@ -3,7 +3,12 @@ import { FileItem } from './types';
 
 let draggedItemPath: string | null = null;
 
+export function getDraggedExplorerItemPath(): string | null {
+  return draggedItemPath;
+}
+
 export class FileExplorer {
+
 
   private container: HTMLElement;
   private pathInput: HTMLInputElement;
@@ -181,14 +186,14 @@ export class FileExplorer {
         row.draggable = true;
 
         row.addEventListener('dragstart', (e) => {
-          e.stopPropagation();
           draggedItemPath = item.path;
           if (e.dataTransfer) {
             e.dataTransfer.setData('text/plain', item.path);
-            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.effectAllowed = 'all';
           }
           row.classList.add('dragging-source');
         });
+
 
         row.addEventListener('dragend', () => {
           row.classList.remove('dragging-source');

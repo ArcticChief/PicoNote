@@ -1,7 +1,8 @@
 import { api } from './api';
 
 import { CodeMirrorEditor } from './editor';
-import { FileExplorer } from './explorer';
+import { FileExplorer, getDraggedExplorerItemPath } from './explorer';
+
 import { parseMarkdown, renderFrontmatterHtml } from './markdown';
 import { CommandPalette } from './palette';
 import { SpotlightSearch } from './spotlight';
@@ -344,29 +345,37 @@ class PicoNoteApp {
     [pane1, pane2].forEach((pane, index) => {
       if (!pane) return;
 
-      pane.addEventListener('dragover', (e) => {
+      const handleDragOver = (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (e.dataTransfer) {
           e.dataTransfer.dropEffect = 'copy';
         }
         pane.classList.add('drag-over-pane');
-      });
+      };
 
-      pane.addEventListener('dragleave', (e) => {
-        e.stopPropagation();
-        pane.classList.remove('drag-over-pane');
-      });
+      const handleDragLeave = (e: DragEvent) => {
+        const rect = pane.getBoundingClientRect();
+        if (
+          e.clientX <= rect.left ||
+          e.clientX >= rect.right ||
+          e.clientY <= rect.top ||
+          e.clientY >= rect.bottom
+        ) {
+          pane.classList.remove('drag-over-pane');
+        }
+      };
 
-      pane.addEventListener('drop', async (e) => {
+      const handleDrop = async (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         pane.classList.remove('drag-over-pane');
 
-        const dropData = e.dataTransfer?.getData('text/plain');
+        const explorerPath = getDraggedExplorerItemPath();
+        const dropData = explorerPath || e.dataTransfer?.getData('text/plain');
         if (!dropData) return;
 
-        const tabById = this.tabManager.getTabs().find((t) => t.id === dropData);
+        const tabById = this.tabManager.getTabs().find((t) => t.id === dropData || t.path === dropData);
         let filePath = tabById ? (tabById.path || null) : dropData;
         let tabId = tabById ? tabById.id : null;
 
@@ -401,8 +410,13 @@ class PicoNoteApp {
             this.checkSplitPaneReadOnly();
           }
         }
-      });
+      };
+
+      pane.addEventListener('dragover', handleDragOver, true);
+      pane.addEventListener('dragleave', handleDragLeave, true);
+      pane.addEventListener('drop', handleDrop, true);
     });
+
 
 
 
