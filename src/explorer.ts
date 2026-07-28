@@ -29,14 +29,14 @@ export class FileExplorer {
     this.onOpenFileInSplit = onOpenFileInSplit;
 
 
-    this.pathInput.addEventListener('keydown', (e) => {
+    this.pathInput?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         const val = this.pathInput.value.trim();
         if (val) this.openFolder(val);
       }
     });
 
-    this.searchInput.addEventListener('input', () => {
+    this.searchInput?.addEventListener('input', () => {
       this.filterQuery = this.searchInput.value.trim().toLowerCase();
       if (this.currentFolder) this.refresh();
     });
@@ -82,17 +82,20 @@ export class FileExplorer {
     }
 
     this.currentFolder = folderPath;
-    this.pathInput.value = folderPath;
+    if (this.pathInput) this.pathInput.value = folderPath;
     this.expandedFolders.clear();
     this.expandedFolders.add(folderPath);
     await this.refresh();
   }
 
   public async refresh(): Promise<void> {
+    if (!this.container) return;
+
     if (!this.currentFolder) {
       this.container.innerHTML = '<div class="welcome-msg">Open a folder to view files</div>';
       return;
     }
+
 
     this.container.innerHTML = '';
     const rootEl = await this.renderDirectory(this.currentFolder);

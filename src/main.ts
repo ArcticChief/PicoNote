@@ -79,12 +79,13 @@ class PicoNoteApp {
     );
 
     this.explorer = new FileExplorer(
-      'file-tree-container',
+      'file-explorer',
       'folder-path-input',
-      'search-files-input',
+      'explorer-search-input',
       (filePath) => this.openFileByPath(filePath),
       (filePath) => this.openFileInSplitPane(filePath)
     );
+
 
     this.palette = new CommandPalette();
     this.spotlight = new SpotlightSearch(
