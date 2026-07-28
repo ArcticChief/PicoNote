@@ -334,7 +334,25 @@ export class FileExplorer {
     menu.style.left = `${Math.max(margin, posX)}px`;
     menu.style.top = `${Math.max(margin, posY)}px`;
 
+    const closeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', onDocumentClick);
+      document.removeEventListener('contextmenu', onDocumentClick);
+    };
+
+    const onDocumentClick = (evt: MouseEvent) => {
+      if (!menu.contains(evt.target as Node)) {
+        closeMenu();
+      }
+    };
+
+    setTimeout(() => {
+      document.addEventListener('click', onDocumentClick);
+      document.addEventListener('contextmenu', onDocumentClick);
+    }, 0);
+
     menu.querySelector('#ctx-fav')?.addEventListener('click', () => {
+      closeMenu();
       if (this.favorites.has(item.path)) {
         this.favorites.delete(item.path);
       } else {
@@ -347,7 +365,7 @@ export class FileExplorer {
     const targetDir = item.is_directory ? item.path : item.path.slice(0, item.path.lastIndexOf('\\'));
 
     menu.querySelector('#ctx-new-file')?.addEventListener('click', async () => {
-
+      closeMenu();
       const fileName = prompt('Enter new file name:', 'untitled.md');
       if (fileName) {
         const fullPath = `${targetDir}\\${fileName}`;
@@ -358,6 +376,7 @@ export class FileExplorer {
     });
 
     menu.querySelector('#ctx-new-folder')?.addEventListener('click', async () => {
+      closeMenu();
       const folderName = prompt('Enter new folder name:');
       if (folderName) {
         const fullPath = `${targetDir}\\${folderName}`;
@@ -367,11 +386,13 @@ export class FileExplorer {
     });
 
     menu.querySelector('#ctx-reveal')?.addEventListener('click', () => {
+      closeMenu();
       const folderToReveal = item.is_directory ? item.path : item.path.slice(0, item.path.lastIndexOf('\\'));
       api.openUrl(folderToReveal);
     });
 
     menu.querySelector('#ctx-rename')?.addEventListener('click', async () => {
+      closeMenu();
       const newName = prompt('Rename to:', item.name);
       if (newName && newName !== item.name) {
         const parent = item.path.slice(0, item.path.lastIndexOf('\\'));
@@ -382,6 +403,7 @@ export class FileExplorer {
     });
 
     menu.querySelector('#ctx-delete')?.addEventListener('click', async () => {
+      closeMenu();
       if (confirm(`Move "${item.name}" to Trash (.trash/)?`)) {
         if (this.currentFolder) {
           await api.trashItem(item.path, this.currentFolder);
@@ -393,4 +415,5 @@ export class FileExplorer {
     });
   }
 }
+
 
