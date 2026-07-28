@@ -1501,7 +1501,7 @@ body, html {
 }
 
 /* Modals & Overlays */
-#setup-modal, #spotlight-modal, #command-palette {
+#setup-modal, #spotlight-modal, #command-palette, .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(9, 10, 15, 0.75);
@@ -1509,12 +1509,13 @@ body, html {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: 2000;
 }
 
-#setup-modal.hidden, #spotlight-modal.hidden, #command-palette.hidden {
+#setup-modal.hidden, #spotlight-modal.hidden, #command-palette.hidden, .modal-overlay.hidden {
   display: none;
 }
+
 
 .modal-card, .spotlight-card, .palette-modal {
   width: 90%;
