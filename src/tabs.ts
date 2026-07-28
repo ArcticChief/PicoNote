@@ -131,12 +131,17 @@ export class TabManager {
 
 
   public openTab(path: string | null, name: string, content: string): Tab {
-    // Check if already open by path
+    return this.findOrOpenTab(path, name, content, true);
+  }
+
+  public findOrOpenTab(path: string | null, name: string, content: string, activate: boolean = true): Tab {
     if (path) {
       const existing = this.tabs.find((t) => t.path === path);
       if (existing) {
-        this.activeTabId = existing.id;
-        this.notify();
+        if (activate) {
+          this.activeTabId = existing.id;
+          this.notify();
+        }
         return existing;
       }
     }
@@ -154,10 +159,13 @@ export class TabManager {
     };
 
     this.tabs.push(newTab);
-    this.activeTabId = id;
+    if (activate) {
+      this.activeTabId = id;
+    }
     this.notify();
     return newTab;
   }
+
 
   public closeTab(id: string): void {
     const index = this.tabs.findIndex((t) => t.id === id);

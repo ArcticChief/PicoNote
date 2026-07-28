@@ -380,12 +380,12 @@ class PicoNoteApp {
         if (!tabById && filePath) {
           const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
           if (this.isImageFile(filename)) {
-            const t = this.tabManager.openTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`);
+            const t = this.tabManager.findOrOpenTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`, !isPane2);
             tabId = t.id;
           } else {
             try {
               const content = await api.readFile(filePath);
-              const t = this.tabManager.openTab(filePath, filename, content);
+              const t = this.tabManager.findOrOpenTab(filePath, filename, content, !isPane2);
               tabId = t.id;
             } catch (err) {
               console.error('Failed to read dropped file:', err);
@@ -401,13 +401,13 @@ class PicoNoteApp {
           const targetTab = tabId ? this.tabManager.getTabs().find((t) => t.id === tabId) : null;
           if (targetTab) {
             await this.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
-            this.checkSplitPaneReadOnly();
           }
         } else {
           if (tabId) {
             this.tabManager.setActiveTab(tabId);
           }
         }
+
       });
     });
 
@@ -1571,11 +1571,11 @@ class PicoNoteApp {
     let tab = this.tabManager.getTabs().find((t) => t.path === filePath);
     if (!tab) {
       if (this.isImageFile(filename)) {
-        tab = this.tabManager.openTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`);
+        tab = this.tabManager.findOrOpenTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`, false);
       } else {
         try {
           const content = await api.readFile(filePath);
-          tab = this.tabManager.openTab(filePath, filename, content);
+          tab = this.tabManager.findOrOpenTab(filePath, filename, content, false);
         } catch (err) {
           console.error('Failed to read file for split pane:', err);
           return;
@@ -1589,9 +1589,9 @@ class PicoNoteApp {
 
     if (tab) {
       await this.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
-      this.checkSplitPaneReadOnly();
     }
   }
+
 
   private syncPane2ToLatest(): void {
 
@@ -1728,7 +1728,9 @@ class PicoNoteApp {
     if (this.editor2) {
       this.editor2.setContent(content, target.path || target.name);
       this.checkSplitPaneReadOnly();
+      this.populateSplitFileSelect();
       this.editor2.setOnChange((newContent) => {
+
         const tab = target.id
           ? this.tabManager.getTabs().find((t) => t.id === target.id)
           : this.tabManager.getTabs().find((t) => t.path === target.path);
