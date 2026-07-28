@@ -688,6 +688,7 @@ class PicoNoteApp {
     tabs.forEach((tab) => {
       const el = document.createElement('div');
       el.className = `tab ${active && active.id === tab.id ? 'active' : ''} ${tab.pinned ? 'pinned' : ''}`;
+      el.setAttribute('title', tab.path || tab.name);
       if (tab.colorTag) {
         el.setAttribute('data-color-tag', tab.colorTag);
       }
@@ -695,11 +696,12 @@ class PicoNoteApp {
       const icon = this.getTabFileIcon(tab.name);
       el.innerHTML = `
         <span class="tab-icon">${icon}</span>
-        <span>${tab.name}</span>
+        <span class="tab-title">${tab.name}</span>
         ${tab.pinned ? '<span class="tab-pin-icon" title="Pinned">📌</span>' : ''}
         ${tab.isDirty ? '<span class="tab-dot" title="Unsaved changes"></span>' : ''}
         ${!tab.pinned ? `<span class="tab-close" data-id="${tab.id}">&times;</span>` : ''}
       `;
+
 
       el.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;

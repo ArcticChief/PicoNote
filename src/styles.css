@@ -503,7 +503,17 @@ body, html {
   display: flex;
   align-items: center;
   font-size: 13px;
+  flex-shrink: 0;
 }
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 
 .tab-pin-icon {
   font-size: 10px;
@@ -786,7 +796,9 @@ body, html {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  padding: 4px 12px;
+  height: 32px;
+  box-sizing: border-box;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   font-size: 11px;
@@ -802,25 +814,61 @@ body, html {
   align-items: center;
   gap: 6px;
   color: var(--accent-primary);
+  flex-shrink: 0;
+  width: 65px;
+}
+
+.split-header-spacer {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .split-file-select {
   flex: 1;
-  max-width: 260px;
-  background: var(--bg-primary);
+  min-width: 0;
+  max-width: 240px;
+  height: 24px;
+  background-color: var(--bg-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 10px;
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  font-size: 12px;
-  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 0 24px 0 10px;
   border-radius: var(--radius-sm);
   outline: none;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.split-file-select:hover {
+  border-color: rgba(129, 140, 248, 0.4);
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
 }
 
 .split-file-select:focus {
   border-color: var(--accent-primary);
   color: var(--text-primary);
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
 }
+
+.split-file-select option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 6px 10px;
+}
+
 
 .editor-pane-body {
   flex: 1;
