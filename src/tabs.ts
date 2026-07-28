@@ -43,6 +43,11 @@ export class TabManager {
     const group = this.groups.find((g) => g.id === groupId);
     if (group) {
       group.color = color;
+      this.tabs.forEach((t) => {
+        if (t.groupId === groupId) {
+          t.colorTag = color;
+        }
+      });
       this.notify();
     }
   }
@@ -74,9 +79,14 @@ export class TabManager {
     const tab = this.tabs.find((t) => t.id === tabId);
     if (tab) {
       tab.groupId = groupId;
+      if (groupId) {
+        const grp = this.groups.find((g) => g.id === groupId);
+        if (grp) tab.colorTag = grp.color;
+      }
       this.notify();
     }
   }
+
 
   public reorderTab(sourceId: string, targetId: string): void {
     const sourceIdx = this.tabs.findIndex((t) => t.id === sourceId);

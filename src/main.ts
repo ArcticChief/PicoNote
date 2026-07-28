@@ -695,12 +695,16 @@ class PicoNoteApp {
       allTabsText.textContent = `Tabs (${tabs.length})`;
     }
 
-    // 1. Render Group Pills and their assigned tabs
+    // 1. Render Group Containers and their assigned tabs
+
     groups.forEach((g) => {
       const groupTabs = tabs.filter((t) => t.groupId === g.id);
 
+      const groupContainer = document.createElement('div');
+      groupContainer.className = `tab-group-container color-${g.color}`;
+
       const pill = document.createElement('div');
-      pill.className = `tab-group-pill color-${g.color} ${g.collapsed ? 'collapsed' : ''}`;
+      pill.className = `tab-group-pill ${g.collapsed ? 'collapsed' : ''}`;
       pill.title = `Group: ${g.name} (${groupTabs.length} tabs) — Click to ${g.collapsed ? 'expand' : 'collapse'}, Right-click to manage`;
       pill.innerHTML = `
         <span class="group-dot color-${g.color}"></span>
@@ -719,33 +723,35 @@ class PicoNoteApp {
         this.showGroupContextMenu(e.clientX, e.clientY, g);
       });
 
-      // Drag & Drop onto Group Pill to Join Group
-      pill.addEventListener('dragover', (e) => {
+      // Drag & Drop onto Group Container / Pill to Join Group
+      groupContainer.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        pill.classList.add('drag-over');
+        groupContainer.classList.add('drag-over');
       });
 
-      pill.addEventListener('dragleave', () => {
-        pill.classList.remove('drag-over');
+      groupContainer.addEventListener('dragleave', () => {
+        groupContainer.classList.remove('drag-over');
       });
 
-      pill.addEventListener('drop', (e) => {
+      groupContainer.addEventListener('drop', (e) => {
         e.preventDefault();
-        pill.classList.remove('drag-over');
+        groupContainer.classList.remove('drag-over');
         const sourceId = e.dataTransfer?.getData('text/plain');
         if (sourceId) {
           this.tabManager.assignTabToGroup(sourceId, g.id);
         }
       });
 
-      this.tabsContainer.appendChild(pill);
+      groupContainer.appendChild(pill);
 
       if (!g.collapsed) {
         groupTabs.forEach((tab) => {
-          this.appendTabElement(tab, active, g.color);
+          this.appendTabElement(tab, active, g.color, groupContainer);
         });
       }
+
+      this.tabsContainer.appendChild(groupContainer);
     });
 
     // 2. Render Ungrouped Tabs
@@ -763,7 +769,7 @@ class PicoNoteApp {
     }, 50);
   }
 
-  private appendTabElement(tab: Tab, active: Tab | null, groupColor?: string): void {
+  private appendTabElement(tab: Tab, active: Tab | null, groupColor?: string, targetContainer?: HTMLElement): void {
     const el = document.createElement('div');
     const inGroupClass = groupColor ? `in-group-${groupColor}` : '';
     el.className = `tab ${active && active.id === tab.id ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${inGroupClass}`;
@@ -790,16 +796,19 @@ class PicoNoteApp {
 
     el.addEventListener('dragover', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       el.classList.add('drag-over');
     });
 
-    el.addEventListener('dragleave', () => {
+    el.addEventListener('dragleave', (e) => {
+      e.stopPropagation();
       el.classList.remove('drag-over');
     });
 
     el.addEventListener('drop', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       el.classList.remove('drag-over');
       const sourceId = e.dataTransfer?.getData('text/plain');
       if (sourceId && sourceId !== tab.id) {
@@ -809,14 +818,12 @@ class PicoNoteApp {
     });
 
     el.addEventListener('dragend', () => {
-      document.querySelectorAll('.tab, .tab-group-pill').forEach((t) => {
+      document.querySelectorAll('.tab, .tab-group-pill, .tab-group-container').forEach((t) => {
         t.classList.remove('dragging', 'drag-over');
       });
     });
 
-
     el.addEventListener('click', (e) => {
-
       const target = e.target as HTMLElement;
       if (target.classList.contains('tab-close')) {
         e.stopPropagation();
@@ -832,10 +839,15 @@ class PicoNoteApp {
       this.showTabContextMenu(e.clientX, e.clientY, tab);
     });
 
-    this.tabsContainer.appendChild(el);
+    if (targetContainer) {
+      targetContainer.appendChild(el);
+    } else {
+      this.tabsContainer.appendChild(el);
+    }
   }
 
   private renderAllTabsDropdown(query: string = ''): void {
+
     const listEl = document.getElementById('all-tabs-list');
     if (!listEl) return;
     listEl.innerHTML = '';
