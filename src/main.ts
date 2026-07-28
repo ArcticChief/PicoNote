@@ -23,6 +23,11 @@ class PicoNoteApp {
   private autoSaveEnabled: boolean = true;
   private autoSaveTimer: any = null;
 
+  private diaryEditor: CodeMirrorEditor | null = null;
+  private currentDiaryDate: Date = new Date();
+  private diaryAutoSaveTimer: any = null;
+
+
   private previewVisible: boolean = false;
   private outlineVisible: boolean = false;
   private sidebarVisible: boolean = true;
@@ -276,13 +281,51 @@ class PicoNoteApp {
       this.explorer.toggleCollapseExpandAll();
     });
 
-    // Polished Daily Diary Corner at Sidebar Bottom
+    // Minimal Daily Diary Sidebar Row & Centered Modal Controls
     const now = new Date();
     const diaryBadge = document.getElementById('diary-date-badge');
     if (diaryBadge) {
       diaryBadge.textContent = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     }
-    document.getElementById('btn-open-diary')?.addEventListener('click', () => this.openDailyJournal());
+    document.getElementById('btn-open-diary')?.addEventListener('click', () => this.openDiaryModal());
+    document.getElementById('diary-modal-close')?.addEventListener('click', () => {
+      document.getElementById('diary-modal')?.classList.add('hidden');
+    });
+
+    document.getElementById('diary-prev-day')?.addEventListener('click', () => {
+      const prev = new Date(this.currentDiaryDate);
+      prev.setDate(prev.getDate() - 1);
+      this.openDiaryModal(prev);
+    });
+
+    document.getElementById('diary-next-day')?.addEventListener('click', () => {
+      const next = new Date(this.currentDiaryDate);
+      next.setDate(next.getDate() + 1);
+      this.openDiaryModal(next);
+    });
+
+    document.getElementById('diary-today')?.addEventListener('click', () => {
+      this.openDiaryModal(new Date());
+    });
+
+    document.getElementById('diary-modal-save')?.addEventListener('click', async () => {
+      if (this.diaryEditor) {
+        const rootFolder = this.explorer.getCurrentFolder() || localStorage.getItem('piconote-main-folder');
+        if (rootFolder) {
+          const d = this.currentDiaryDate;
+          const year = d.getFullYear().toString();
+          const monthNum = String(d.getMonth() + 1).padStart(2, '0');
+          const monthName = d.toLocaleString('en-US', { month: 'long' });
+          const monthFolder = `${monthNum}-${monthName}`;
+          const dayNum = String(d.getDate()).padStart(2, '0');
+          const dayName = d.toLocaleString('en-US', { weekday: 'long' });
+          const fullPath = `${rootFolder}\\Journal\\${year}\\${monthFolder}\\${year}-${monthNum}-${dayNum}_${dayName}.md`;
+          await api.writeFile(fullPath, this.diaryEditor.getContent());
+          const statusEl = document.getElementById('diary-modal-status');
+          if (statusEl) statusEl.textContent = 'Saved manually';
+        }
+      }
+    });
 
     document.getElementById('btn-preview-toggle')?.addEventListener('click', () => this.togglePreview());
 
@@ -339,6 +382,14 @@ class PicoNoteApp {
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.getElementById('diary-modal')?.classList.add('hidden');
+      }
+
+      if (e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        this.openDiaryModal();
+      }
 
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'k' || e.key === 'K') {
@@ -382,10 +433,12 @@ class PicoNoteApp {
     });
   }
 
+
   private setupCommands(): void {
     this.palette.registerCommands([
       { id: 'spotlight-search', label: 'Workspace: Global Spotlight Search...', shortcut: 'Ctrl+K', action: () => this.spotlight.show() },
-      { id: 'daily-journal', label: 'Journal: Open / Create Today\'s Daily Journal', shortcut: 'Ctrl+Alt+N', action: () => this.openDailyJournal() },
+      { id: 'daily-journal', label: 'Journal: Open / Create Today\'s Daily Journal', shortcut: 'Ctrl+Alt+N', action: () => this.openDiaryModal() },
+
       { id: 'split-view', label: 'View: Toggle Split Editor Pane', shortcut: 'Ctrl+\\', action: () => this.toggleSplitView() },
       { id: 'set-main-folder', label: 'Workspace: Set Main Folder (Entry Point)...', shortcut: 'Ctrl+Shift+O', action: () => this.setMainWorkspaceFolder() },
       { id: 'new-file', label: 'File: New File', shortcut: 'Ctrl+N', action: () => this.newFile() },
@@ -858,20 +911,22 @@ class PicoNoteApp {
     }
   }
 
-  private async openDailyJournal(): Promise<void> {
+  private async openDiaryModal(targetDate?: Date): Promise<void> {
+    if (targetDate) this.currentDiaryDate = new Date(targetDate);
+    const date = this.currentDiaryDate;
+
     const rootFolder = this.explorer.getCurrentFolder() || localStorage.getItem('piconote-main-folder');
     if (!rootFolder) {
       alert('Please select or open a workspace folder first to initialize your Daily Diary.');
       return;
     }
 
-    const now = new Date();
-    const year = now.getFullYear().toString();
-    const monthNum = String(now.getMonth() + 1).padStart(2, '0');
-    const monthName = now.toLocaleString('en-US', { month: 'long' });
+    const year = date.getFullYear().toString();
+    const monthNum = String(date.getMonth() + 1).padStart(2, '0');
+    const monthName = date.toLocaleString('en-US', { month: 'long' });
     const monthFolder = `${monthNum}-${monthName}`;
-    const dayNum = String(now.getDate()).padStart(2, '0');
-    const dayName = now.toLocaleString('en-US', { weekday: 'long' });
+    const dayNum = String(date.getDate()).padStart(2, '0');
+    const dayName = date.toLocaleString('en-US', { weekday: 'long' });
     const fullDateStr = `${year}-${monthNum}-${dayNum}`;
     const filename = `${fullDateStr}_${dayName}.md`;
 
@@ -887,14 +942,46 @@ class PicoNoteApp {
     const fullPath = `${monthDir}\\${filename}`;
     const exists = await api.pathExists(fullPath);
 
-    if (!exists) {
-      const template = `---\ntitle: Daily Entry - ${dayName}, ${monthName} ${dayNum}, ${year}\ndate: ${fullDateStr}\nday: ${dayName}\nyear: ${year}\nmonth: ${monthName}\ntags: [diary, journal]\n---\n\n# 📓 ${dayName}, ${monthName} ${dayNum}, ${year}\n\n## 🌟 Daily Reflection & Focus\n- [ ] \n\n## 📝 Notes & Thoughts\n\n`;
-      await api.writeFile(fullPath, template);
+    let content = '';
+    if (exists) {
+      content = await api.readFile(fullPath);
+    } else {
+      content = `---\ntitle: Daily Entry - ${dayName}, ${monthName} ${dayNum}, ${year}\ndate: ${fullDateStr}\nday: ${dayName}\nyear: ${year}\nmonth: ${monthName}\ntags: [diary, journal]\n---\n\n# 📓 ${dayName}, ${monthName} ${dayNum}, ${year}\n\n## 🌟 Daily Reflection & Focus\n- [ ] \n\n## 📝 Notes & Thoughts\n\n`;
+      await api.writeFile(fullPath, content);
       await this.explorer.refresh();
     }
 
-    await this.openFileByPath(fullPath);
+    // Update modal UI
+    const modalDate = document.getElementById('diary-modal-date');
+    if (modalDate) {
+      modalDate.textContent = `${dayName}, ${monthName} ${dayNum}, ${year}`;
+    }
+
+    const modal = document.getElementById('diary-modal');
+    modal?.classList.remove('hidden');
+
+    const editorContainer = document.getElementById('diary-modal-editor');
+    if (!this.diaryEditor && editorContainer) {
+      this.diaryEditor = new CodeMirrorEditor(editorContainer);
+      this.diaryEditor.setTheme(this.themeManager.getTheme() === 'dark');
+      this.diaryEditor.setOnChange((newContent) => {
+        const statusEl = document.getElementById('diary-modal-status');
+        if (statusEl) statusEl.textContent = 'Saving...';
+
+        if (this.diaryAutoSaveTimer) clearTimeout(this.diaryAutoSaveTimer);
+        this.diaryAutoSaveTimer = setTimeout(async () => {
+          await api.writeFile(fullPath, newContent);
+          if (statusEl) statusEl.textContent = 'Saved silently';
+        }, 800);
+      });
+    }
+
+    if (this.diaryEditor) {
+      this.diaryEditor.setContent(content, fullPath);
+      this.diaryEditor.focus();
+    }
   }
+
 
 
   private toggleSplitView(): void {

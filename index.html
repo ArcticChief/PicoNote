@@ -257,6 +257,30 @@
       </div>
     </div>
 
+    <!-- Dedicated Independent Daily Diary Modal Overlay -->
+    <div id="diary-modal" class="hidden">
+      <div class="diary-modal-card">
+        <div class="diary-modal-header">
+          <div class="diary-modal-title-group">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            <div class="diary-modal-date" id="diary-modal-date">Tuesday, July 28, 2026</div>
+          </div>
+          <div class="diary-modal-nav">
+            <button id="diary-prev-day" class="diary-nav-btn" title="Previous Day">◀</button>
+            <button id="diary-today" class="diary-nav-btn" title="Jump to Today">Today</button>
+            <button id="diary-next-day" class="diary-nav-btn" title="Next Day">▶</button>
+            <button id="diary-modal-close" class="diary-close-btn" title="Close (ESC)">✕</button>
+          </div>
+        </div>
+        <div id="diary-modal-editor" class="diary-modal-body"></div>
+        <div class="diary-modal-footer">
+          <span id="diary-modal-status" class="diary-status-msg">Saved silently</span>
+          <button id="diary-modal-save" class="welcome-btn primary">Save Entry</button>
+        </div>
+      </div>
+    </div>
+
+
     <!-- Spotlight Full-Text Vault Search Overlay (Ctrl+K) -->
     <div id="spotlight-modal" class="hidden">
       <div class="spotlight-card">
