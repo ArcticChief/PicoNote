@@ -304,15 +304,26 @@ class PicoNoteApp {
     });
 
 
-    document.getElementById('pane2-file-select')?.addEventListener('change', (e) => {
-      const val = (e.target as HTMLSelectElement).value;
-      if (val) {
-        const tab = this.tabManager.getTabs().find((t) => t.id === val || t.path === val);
-        if (tab) {
-          this.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
-        }
+    // Tabs Toolbar Right-Click Context Menu
+    this.tabsContainer.addEventListener('contextmenu', (e) => {
+      const target = e.target as HTMLElement;
+      if (target === this.tabsContainer || target.id === 'editor-tabs-bar' || target.id === 'tabs-container') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showTabsBarContextMenu(e.clientX, e.clientY);
       }
     });
+
+    const tabsBar = document.getElementById('editor-tabs-bar');
+    tabsBar?.addEventListener('contextmenu', (e) => {
+      const target = e.target as HTMLElement;
+      if (target === tabsBar || target.classList.contains('tabs-left') || target.classList.contains('tabs-scroll')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showTabsBarContextMenu(e.clientX, e.clientY);
+      }
+    });
+
 
 
 
@@ -960,11 +971,7 @@ class PicoNoteApp {
     });
 
     menu.querySelector('#tab-ctx-new-grp')?.addEventListener('click', () => {
-      const groupName = prompt('Enter new Tab Group name:');
-      if (groupName) {
-        const grp = this.tabManager.createGroup(groupName);
-        this.tabManager.assignTabToGroup(tab.id, grp.id);
-      }
+      this.promptNewGroup(tab.id);
     });
 
     menu.querySelector('#tab-ctx-ungrp')?.addEventListener('click', () => {
@@ -1052,10 +1059,7 @@ class PicoNoteApp {
     setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
 
     menu.querySelector('#grp-ctx-rename')?.addEventListener('click', () => {
-      const newName = prompt('Enter new group name:', group.name);
-      if (newName) {
-        this.tabManager.renameGroup(group.id, newName);
-      }
+      this.promptRenameGroup(group);
     });
 
     menu.querySelector('#grp-ctx-color-purple')?.addEventListener('click', () => {
@@ -1086,6 +1090,192 @@ class PicoNoteApp {
       this.tabManager.removeGroup(group.id, true);
     });
   }
+
+  private promptNewGroup(defaultTabId?: string): void {
+    const existing = document.getElementById('new-group-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'new-group-modal';
+    overlay.className = 'modal-overlay';
+
+    overlay.innerHTML = `
+      <div class="modal-content glass-panel" style="max-width: 360px; padding: 20px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+          <h3 style="margin:0; font-size:14px; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            Create Tab Group
+          </h3>
+          <button id="close-grp-modal" class="preview-close-btn">&times;</button>
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label style="display:block; font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:6px;">GROUP NAME</label>
+          <input type="text" id="grp-name-input" class="search-input" placeholder="e.g. Project Docs, Ideas..." style="width:100%; box-sizing:border-box;" autofocus />
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="display:block; font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:8px;">ACCENT COLOR</label>
+          <div style="display:flex; gap:10px;" id="grp-color-picker">
+            <button type="button" class="color-opt-btn" data-color="purple" style="background:#818cf8; border:2px solid #fff; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
+            <button type="button" class="color-opt-btn" data-color="blue" style="background:#38bdf8; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
+            <button type="button" class="color-opt-btn" data-color="emerald" style="background:#34d399; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
+            <button type="button" class="color-opt-btn" data-color="amber" style="background:#fbbf24; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
+            <button type="button" class="color-opt-btn" data-color="rose" style="background:#f43f5e; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button id="cancel-grp-btn" class="tb-btn" style="padding:6px 12px; font-size:12px;">Cancel</button>
+          <button id="confirm-grp-btn" class="tb-btn" style="background:var(--accent-gradient); color:#fff; padding:6px 14px; font-size:12px; border:none;">Create Group</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    let selectedColor = 'purple';
+    const input = overlay.querySelector('#grp-name-input') as HTMLInputElement;
+    input.focus();
+
+    overlay.querySelectorAll('.color-opt-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        overlay.querySelectorAll('.color-opt-btn').forEach((b) => ((b as HTMLElement).style.border = 'none'));
+        (btn as HTMLElement).style.border = '2px solid #fff';
+        selectedColor = btn.getAttribute('data-color') || 'purple';
+      });
+    });
+
+    const submit = () => {
+      const name = input.value.trim() || 'New Group';
+      const grp = this.tabManager.createGroup(name, selectedColor);
+      if (defaultTabId) {
+        this.tabManager.assignTabToGroup(defaultTabId, grp.id);
+      }
+      overlay.remove();
+    };
+
+    overlay.querySelector('#confirm-grp-btn')?.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submit();
+      if (e.key === 'Escape') overlay.remove();
+    });
+
+    overlay.querySelector('#close-grp-modal')?.addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#cancel-grp-btn')?.addEventListener('click', () => overlay.remove());
+  }
+
+  private promptRenameGroup(group: TabGroup): void {
+    const existing = document.getElementById('new-group-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'new-group-modal';
+    overlay.className = 'modal-overlay';
+
+    overlay.innerHTML = `
+      <div class="modal-content glass-panel" style="max-width: 340px; padding: 20px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+          <h3 style="margin:0; font-size:14px; font-weight:700; color:var(--text-primary);">Rename Group</h3>
+          <button id="close-grp-modal" class="preview-close-btn">&times;</button>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <input type="text" id="grp-name-input" class="search-input" value="${group.name}" style="width:100%; box-sizing:border-box;" autofocus />
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button id="cancel-grp-btn" class="tb-btn" style="padding:6px 12px; font-size:12px;">Cancel</button>
+          <button id="confirm-grp-btn" class="tb-btn" style="background:var(--accent-gradient); color:#fff; padding:6px 14px; font-size:12px; border:none;">Save</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#grp-name-input') as HTMLInputElement;
+    input.focus();
+    input.select();
+
+    const submit = () => {
+      const name = input.value.trim();
+      if (name) {
+        this.tabManager.renameGroup(group.id, name);
+      }
+      overlay.remove();
+    };
+
+    overlay.querySelector('#confirm-grp-btn')?.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submit();
+      if (e.key === 'Escape') overlay.remove();
+    });
+
+    overlay.querySelector('#close-grp-modal')?.addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#cancel-grp-btn')?.addEventListener('click', () => overlay.remove());
+  }
+
+  private showTabsBarContextMenu(x: number, y: number): void {
+    const existing = document.getElementById('context-menu');
+    if (existing) existing.remove();
+
+    const groups = this.tabManager.getGroups();
+
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+
+    menu.innerHTML = `
+      <div class="ctx-item" id="tabsbar-ctx-new-group">📁 Create New Empty Group...</div>
+      <div class="ctx-item" id="tabsbar-ctx-new-tab">➕ New Tab</div>
+      ${groups.length > 0 ? '<div class="ctx-divider"></div><div class="ctx-item" id="tabsbar-ctx-toggle-groups">↕️ Toggle Collapse / Expand All Groups</div>' : ''}
+      <div class="ctx-divider"></div>
+      <div class="ctx-item danger" id="tabsbar-ctx-close-all">❌ Close All Unpinned Tabs</div>
+    `;
+
+    document.body.appendChild(menu);
+
+    const rect = menu.getBoundingClientRect();
+    const margin = 10;
+
+    let posX = x;
+    let posY = y;
+
+    if (posX + rect.width > window.innerWidth - margin) {
+      posX = window.innerWidth - rect.width - margin;
+    }
+    if (posY + rect.height > window.innerHeight - margin) {
+      posY = window.innerHeight - rect.height - margin;
+    }
+
+    menu.style.left = `${Math.max(margin, posX)}px`;
+    menu.style.top = `${Math.max(margin, posY)}px`;
+
+    const closeCtx = () => menu.remove();
+    setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
+
+    menu.querySelector('#tabsbar-ctx-new-group')?.addEventListener('click', () => {
+      this.promptNewGroup();
+    });
+
+    menu.querySelector('#tabsbar-ctx-new-tab')?.addEventListener('click', () => {
+      this.newFile();
+    });
+
+    menu.querySelector('#tabsbar-ctx-toggle-groups')?.addEventListener('click', () => {
+      const groups = this.tabManager.getGroups();
+      const anyExpanded = groups.some((g) => !g.collapsed);
+      groups.forEach((g) => {
+        if (g.collapsed !== anyExpanded) {
+          this.tabManager.toggleGroupCollapse(g.id);
+        }
+      });
+    });
+
+    menu.querySelector('#tabsbar-ctx-close-all')?.addEventListener('click', () => {
+      this.tabManager.closeAllTabs();
+    });
+  }
+
 
 
 
