@@ -291,6 +291,8 @@ class PicoNoteApp {
     });
 
     // Split Pane Controls
+    document.getElementById('btn-split-editor')?.addEventListener('click', () => this.toggleSplitView());
+    document.getElementById('btn-close-split')?.addEventListener('click', () => this.toggleSplitView());
     document.getElementById('split-pane-file-select')?.addEventListener('change', (e) => {
       const val = (e.target as HTMLSelectElement).value;
       if (val) {
@@ -300,6 +302,7 @@ class PicoNoteApp {
         }
       }
     });
+
 
 
     // Buttons
