@@ -281,6 +281,19 @@ class PicoNoteApp {
       this.explorer.toggleCollapseExpandAll();
     });
 
+    // Formatting Toolbar Buttons (prevent editor focus loss on mousedown)
+    document.querySelectorAll('.fmt-btn').forEach((btn) => {
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+      });
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const fmt = (e.currentTarget as HTMLElement).getAttribute('data-fmt');
+        if (fmt) this.editor.applyFormatting(fmt);
+      });
+    });
+
+
     // Minimal Daily Diary Sidebar Row & Centered Modal Controls
     const now = new Date();
     const diaryBadge = document.getElementById('diary-date-badge');
@@ -609,6 +622,17 @@ class PicoNoteApp {
       return;
     }
 
+    const fmtBar = document.getElementById('formatting-toolbar');
+    const ext = activeTab ? (activeTab.name.includes('.') ? activeTab.name.slice(activeTab.name.lastIndexOf('.')).toLowerCase() : '') : '';
+    const isMd = ext === '.md' || ext === '.markdown' || !ext;
+    if (fmtBar) {
+      if (activeTab && isMd && !activeTab.content.startsWith('[IMAGE_VIEWER:')) {
+        fmtBar.classList.remove('hidden');
+      } else {
+        fmtBar.classList.add('hidden');
+      }
+    }
+
     this.editorContainer.style.display = 'block';
     if (imageViewer) imageViewer.classList.add('hidden');
 
@@ -616,6 +640,7 @@ class PicoNoteApp {
     if (this.previewVisible) this.updateMarkdownPreview(activeTab.content);
     if (this.outlineVisible) this.updateOutline(activeTab.content);
   }
+
 
 
 

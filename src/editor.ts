@@ -284,67 +284,110 @@ export class CodeMirrorEditor {
     const selectedText = this.view.state.sliceDoc(sel.from, sel.to);
 
     let replacement = '';
-    let cursorOffset = 0;
+    let anchorOffset = 0;
+    let headOffset = 0;
 
     switch (type) {
       case 'bold':
-        replacement = `**${selectedText || 'bold text'}**`;
-        cursorOffset = selectedText ? replacement.length : 2;
+        if (selectedText) {
+          replacement = `**${selectedText}**`;
+          anchorOffset = 2;
+          headOffset = replacement.length - 2;
+        } else {
+          replacement = `****`;
+          anchorOffset = 2;
+          headOffset = 2;
+        }
         break;
       case 'italic':
-        replacement = `*${selectedText || 'italic text'}*`;
-        cursorOffset = selectedText ? replacement.length : 1;
+        if (selectedText) {
+          replacement = `*${selectedText}*`;
+          anchorOffset = 1;
+          headOffset = replacement.length - 1;
+        } else {
+          replacement = `**`;
+          anchorOffset = 1;
+          headOffset = 1;
+        }
         break;
       case 'strike':
-        replacement = `~~${selectedText || 'strikethrough text'}~~`;
-        cursorOffset = selectedText ? replacement.length : 2;
+        if (selectedText) {
+          replacement = `~~${selectedText}~~`;
+          anchorOffset = 2;
+          headOffset = replacement.length - 2;
+        } else {
+          replacement = `~~~~`;
+          anchorOffset = 2;
+          headOffset = 2;
+        }
         break;
       case 'h1':
-        replacement = `# ${selectedText || 'Heading 1'}`;
-        cursorOffset = replacement.length;
+        replacement = `# ${selectedText}`;
+        anchorOffset = replacement.length;
+        headOffset = replacement.length;
         break;
       case 'h2':
-        replacement = `## ${selectedText || 'Heading 2'}`;
-        cursorOffset = replacement.length;
+        replacement = `## ${selectedText}`;
+        anchorOffset = replacement.length;
+        headOffset = replacement.length;
         break;
       case 'h3':
-        replacement = `### ${selectedText || 'Heading 3'}`;
-        cursorOffset = replacement.length;
+        replacement = `### ${selectedText}`;
+        anchorOffset = replacement.length;
+        headOffset = replacement.length;
         break;
       case 'code':
         if (selectedText.includes('\n')) {
           replacement = `\`\`\`\n${selectedText}\n\`\`\``;
+          anchorOffset = 4;
+          headOffset = 4 + selectedText.length;
+        } else if (selectedText) {
+          replacement = `\`${selectedText}\``;
+          anchorOffset = 1;
+          headOffset = replacement.length - 1;
         } else {
-          replacement = `\`${selectedText || 'code'}\``;
+          replacement = `\`\``;
+          anchorOffset = 1;
+          headOffset = 1;
         }
-        cursorOffset = replacement.length;
         break;
       case 'link':
-        replacement = `[${selectedText || 'Link Title'}](https://example.com)`;
-        cursorOffset = replacement.length;
+        if (selectedText) {
+          replacement = `[${selectedText}](https://)`;
+          anchorOffset = selectedText.length + 3;
+          headOffset = replacement.length - 1;
+        } else {
+          replacement = `[link](https://)`;
+          anchorOffset = 1;
+          headOffset = 5;
+        }
         break;
       case 'task':
-        replacement = `- [ ] ${selectedText || 'New task item'}`;
-        cursorOffset = replacement.length;
+        replacement = `- [ ] ${selectedText}`;
+        anchorOffset = replacement.length;
+        headOffset = replacement.length;
         break;
       case 'quote':
-        replacement = `> ${selectedText || 'Quote'}`;
-        cursorOffset = replacement.length;
+        replacement = `> ${selectedText}`;
+        anchorOffset = replacement.length;
+        headOffset = replacement.length;
         break;
       case 'table':
         replacement = `\n| Header 1 | Header 2 |\n| -------- | -------- |\n| Item 1   | Item 2   |\n`;
-        cursorOffset = replacement.length;
+        anchorOffset = replacement.length;
+        headOffset = replacement.length;
         break;
     }
 
     if (replacement) {
       this.view.dispatch({
         changes: { from: sel.from, to: sel.to, insert: replacement },
-        selection: { anchor: sel.from + cursorOffset },
+        selection: { anchor: sel.from + anchorOffset, head: sel.from + headOffset },
       });
       this.view.focus();
     }
   }
+
 
   public destroy(): void {
     this.view.destroy();
