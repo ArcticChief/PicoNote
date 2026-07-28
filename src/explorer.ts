@@ -13,17 +13,21 @@ export class FileExplorer {
   private filterQuery: string = '';
   private favorites: Set<string> = new Set(JSON.parse(localStorage.getItem('piconote-favorites') || '[]'));
   private onFileSelect?: (filePath: string) => void;
+  private onOpenFileInSplit?: (filePath: string) => void;
 
   constructor(
     containerId: string,
     pathInputId: string,
     searchInputId: string,
-    onFileSelect?: (filePath: string) => void
+    onFileSelect?: (filePath: string) => void,
+    onOpenFileInSplit?: (filePath: string) => void
   ) {
     this.container = document.getElementById(containerId) as HTMLElement;
     this.pathInput = document.getElementById(pathInputId) as HTMLInputElement;
     this.searchInput = document.getElementById(searchInputId) as HTMLInputElement;
     this.onFileSelect = onFileSelect;
+    this.onOpenFileInSplit = onOpenFileInSplit;
+
 
     this.pathInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -303,10 +307,11 @@ export class FileExplorer {
     menu.id = 'context-menu';
 
     const isFav = this.favorites.has(item.path);
+    const splitOption = !item.is_directory ? `<div class="ctx-item" id="ctx-open-split">↔️ Open in Split View</div><div class="ctx-divider"></div>` : '';
 
     menu.innerHTML = `
       <div class="ctx-item" id="ctx-fav">${isFav ? '⭐ Remove Favorite' : '⭐ Pin to Favorites'}</div>
-      <div class="ctx-divider"></div>
+      ${splitOption}
       <div class="ctx-item" id="ctx-new-file">➕ New File Here</div>
       <div class="ctx-item" id="ctx-new-folder">📁 New Folder Here</div>
       <div class="ctx-item" id="ctx-reveal">📂 Reveal in System Explorer</div>
@@ -314,7 +319,6 @@ export class FileExplorer {
       <div class="ctx-item" id="ctx-rename">✏️ Rename</div>
       <div class="ctx-item danger" id="ctx-delete">🗑️ Delete</div>
     `;
-
 
     document.body.appendChild(menu);
 
@@ -351,7 +355,17 @@ export class FileExplorer {
       document.addEventListener('contextmenu', onDocumentClick);
     }, 0);
 
+    if (!item.is_directory) {
+      menu.querySelector('#ctx-open-split')?.addEventListener('click', () => {
+        closeMenu();
+        if (this.onOpenFileInSplit) {
+          this.onOpenFileInSplit(item.path);
+        }
+      });
+    }
+
     menu.querySelector('#ctx-fav')?.addEventListener('click', () => {
+
       closeMenu();
       if (this.favorites.has(item.path)) {
         this.favorites.delete(item.path);

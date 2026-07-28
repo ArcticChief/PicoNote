@@ -1085,6 +1085,14 @@ body, html {
   box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
 }
 
+.editor-split-pane.drag-over-pane {
+  outline: 2px dashed var(--accent-primary);
+  outline-offset: -4px;
+  background-color: rgba(99, 102, 241, 0.06);
+  transition: all 0.15s ease;
+}
+
+
 
 
 .editor-pane-body {
