@@ -68,10 +68,15 @@ class PicoNoteApp {
 
 
     this.tabManager = new TabManager(
-      (activeTab) => this.onActiveTabChanged(activeTab),
-      (tabs, groups) => this.renderTabs(tabs, groups)
+      (activeTab) => {
+        this.onActiveTabChanged(activeTab);
+        this.saveSessionState();
+      },
+      (tabs, groups) => {
+        this.renderTabs(tabs, groups);
+        this.saveSessionState();
+      }
     );
-
 
     this.explorer = new FileExplorer(
       'file-explorer',
@@ -108,14 +113,18 @@ class PicoNoteApp {
       this.showSetupModal();
     }
 
-    // Check for file opened from command line / Windows Explorer double-click
+    // Restore Session State or open CLI file / blank file
     const cliFile = await api.getCliFile();
     if (cliFile) {
       await this.openFileByPath(cliFile);
     } else {
-      this.newFile();
+      const restored = await this.restoreSessionState();
+      if (!restored) {
+        this.newFile();
+      }
     }
   }
+
 
 
 
@@ -151,6 +160,12 @@ class PicoNoteApp {
         api.windowStartDrag();
       }
     });
+
+    // Auto-save workspace session state on exit
+    window.addEventListener('beforeunload', () => {
+      this.saveSessionState();
+    });
+
 
 
 
@@ -1276,10 +1291,75 @@ class PicoNoteApp {
     });
   }
 
+  private saveSessionState(): void {
+    try {
+      const tabSession = this.tabManager.exportSessionState();
+      const state = {
+        tabs: tabSession.tabs,
+        groups: tabSession.groups,
+        activeTabId: tabSession.activeTabId,
+        isSplitView: this.isSplitView,
+        pane2Path: this.pane2Path,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem('piconote_workspace_session_v1', JSON.stringify(state));
+    } catch (err) {
+      console.error('Failed to save session state:', err);
+    }
+  }
 
+  private async restoreSessionState(): Promise<boolean> {
+    try {
+      const raw = localStorage.getItem('piconote_workspace_session_v1');
+      if (!raw) return false;
+
+      const state = JSON.parse(raw);
+      if (!state || !state.tabs || !Array.isArray(state.tabs) || state.tabs.length === 0) return false;
+
+      // Re-read file contents asynchronously for disk files to ensure freshness, preserving unsaved changes
+      for (const tab of state.tabs) {
+        if (tab.path && !tab.isDirty) {
+          try {
+            const freshContent = await api.readFile(tab.path);
+            tab.content = freshContent;
+            tab.savedContent = freshContent;
+          } catch {
+            // Keep cached content if file removed
+          }
+        }
+      }
+
+      this.tabManager.restoreSessionState({
+        tabs: state.tabs,
+        groups: state.groups || [],
+        activeTabId: state.activeTabId,
+      });
+
+      const activeTab = this.tabManager.getActiveTab();
+      if (activeTab) {
+        this.onActiveTabChanged(activeTab);
+      }
+
+      if (state.isSplitView) {
+        this.toggleSplitView();
+        if (state.pane2Path) {
+          const p2Tab = state.tabs.find((t: Tab) => t.path === state.pane2Path || t.id === state.pane2Path);
+          if (p2Tab) {
+            this.openInPane2({ id: p2Tab.id, path: p2Tab.path || undefined, name: p2Tab.name });
+          }
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Failed to restore session state:', err);
+      return false;
+    }
+  }
 
 
   private updateMarkdownPreview(content: string): void {
+
     if (!this.previewVisible) return;
     const activeTab = this.tabManager.getActiveTab();
     let noteDir = this.explorer.getCurrentFolder();

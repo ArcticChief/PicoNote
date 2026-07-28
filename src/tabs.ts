@@ -23,6 +23,32 @@ export class TabManager {
     return this.groups;
   }
 
+  public exportSessionState(): { tabs: Tab[]; groups: TabGroup[]; activeTabId: string | null } {
+    return {
+      tabs: this.tabs,
+      groups: this.groups,
+      activeTabId: this.activeTabId,
+    };
+  }
+
+  public restoreSessionState(state: { tabs: Tab[]; groups: TabGroup[]; activeTabId: string | null }): void {
+    if (state.groups && Array.isArray(state.groups)) {
+      this.groups = state.groups;
+    }
+    if (state.tabs && Array.isArray(state.tabs)) {
+      this.tabs = state.tabs;
+    }
+    if (state.activeTabId && this.tabs.some((t) => t.id === state.activeTabId)) {
+      this.activeTabId = state.activeTabId;
+    } else if (this.tabs.length > 0) {
+      this.activeTabId = this.tabs[0].id;
+    } else {
+      this.activeTabId = null;
+    }
+    this.notify();
+  }
+
+
   public createGroup(name: string, color: string = 'purple'): TabGroup {
     const id = 'group-' + Math.random().toString(36).substring(2, 9);
     const newGroup: TabGroup = { id, name, color, collapsed: false };
