@@ -293,7 +293,16 @@ class PicoNoteApp {
     // Split Pane Controls
     document.getElementById('btn-split-editor')?.addEventListener('click', () => this.toggleSplitView());
     document.getElementById('btn-close-split')?.addEventListener('click', () => this.toggleSplitView());
-    document.getElementById('split-pane-file-select')?.addEventListener('change', (e) => {
+
+    document.getElementById('pane1-file-select')?.addEventListener('change', (e) => {
+      const tabId = (e.target as HTMLSelectElement).value;
+      if (tabId) {
+        this.tabManager.setActiveTab(tabId);
+      }
+    });
+
+
+    document.getElementById('pane2-file-select')?.addEventListener('change', (e) => {
       const val = (e.target as HTMLSelectElement).value;
       if (val) {
         const tab = this.tabManager.getTabs().find((t) => t.id === val || t.path === val);
@@ -302,6 +311,7 @@ class PicoNoteApp {
         }
       }
     });
+
 
 
 
@@ -540,6 +550,7 @@ class PicoNoteApp {
   }
 
   private togglePreview(): void {
+    if (this.isSplitView) return;
     this.previewVisible = !this.previewVisible;
     const btn = document.getElementById('btn-preview-toggle');
     const resizer = document.getElementById('preview-resizer');
@@ -558,6 +569,7 @@ class PicoNoteApp {
 
 
   private toggleOutline(): void {
+    if (this.isSplitView) return;
     this.outlineVisible = !this.outlineVisible;
     const btn = document.getElementById('btn-outline-toggle');
     if (this.outlineVisible) {
@@ -570,6 +582,7 @@ class PicoNoteApp {
       btn?.classList.remove('active');
     }
   }
+
 
   private toggleTheme(): void {
     const theme = this.themeManager.toggle();
@@ -949,18 +962,28 @@ class PicoNoteApp {
 
 
   private populateSplitFileSelect(): void {
-    const select = document.getElementById('split-pane-file-select') as HTMLSelectElement;
-    if (!select) return;
+    const select1 = document.getElementById('pane1-file-select') as HTMLSelectElement;
+    const select2 = document.getElementById('pane2-file-select') as HTMLSelectElement;
+    if (!select1 || !select2) return;
 
-    select.innerHTML = '<option value="">-- Select Document to View --</option>';
+    const activeTab = this.tabManager.getActiveTab();
+
+    select1.innerHTML = '<option value="">-- Select Document --</option>';
+    select2.innerHTML = '<option value="">-- Select Document --</option>';
 
     const tabs = this.tabManager.getTabs();
     tabs.forEach((t) => {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
-      if (t.id === this.pane2Path || t.path === this.pane2Path) opt.selected = true;
-      select.appendChild(opt);
+      const opt1 = document.createElement('option');
+      opt1.value = t.id;
+      opt1.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
+      if (activeTab && t.id === activeTab.id) opt1.selected = true;
+      select1.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = t.id;
+      opt2.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
+      if (t.id === this.pane2Path || t.path === this.pane2Path) opt2.selected = true;
+      select2.appendChild(opt2);
     });
   }
 
@@ -1017,11 +1040,28 @@ class PicoNoteApp {
 
   private toggleSplitView(): void {
     this.isSplitView = !this.isSplitView;
+    const pane1Header = document.getElementById('pane1-header');
     const pane2 = document.getElementById('editor-pane-2');
     const resizer = document.getElementById('split-resizer');
     const btn = document.getElementById('btn-split-editor');
 
+    const btnPreview = document.getElementById('btn-preview-toggle') as HTMLButtonElement | null;
+    const btnOutline = document.getElementById('btn-outline-toggle') as HTMLButtonElement | null;
+
     if (this.isSplitView) {
+      if (this.previewVisible) this.togglePreview();
+      if (this.outlineVisible) this.toggleOutline();
+
+      if (btnPreview) {
+        btnPreview.disabled = true;
+        btnPreview.title = 'Preview is disabled in Split Mode';
+      }
+      if (btnOutline) {
+        btnOutline.disabled = true;
+        btnOutline.title = 'Outline is disabled in Split Mode';
+      }
+
+      pane1Header?.classList.remove('hidden');
       pane2?.classList.remove('hidden');
       resizer?.classList.remove('hidden');
       btn?.classList.add('active');
@@ -1038,16 +1078,28 @@ class PicoNoteApp {
         this.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
       }
     } else {
+      if (btnPreview) {
+        btnPreview.disabled = false;
+        btnPreview.title = 'Toggle Markdown Preview (Ctrl+Shift+M)';
+      }
+      if (btnOutline) {
+        btnOutline.disabled = false;
+        btnOutline.title = 'Toggle Heading Outline (Ctrl+Shift+O)';
+      }
+
+      pane1Header?.classList.add('hidden');
       pane2?.classList.add('hidden');
       resizer?.classList.add('hidden');
       btn?.classList.remove('active');
-      const pane1 = document.getElementById('editor-container');
+      const pane1 = document.getElementById('editor-pane-1');
       if (pane1) {
         pane1.style.width = '';
         pane1.style.flex = '1';
       }
     }
   }
+
+
 
 
 

@@ -164,7 +164,19 @@
 
       <!-- Workspace Area -->
       <div id="workspace">
-        <div id="editor-container" class="editor-pane"></div>
+        <!-- Split View Pane 1 -->
+        <div id="editor-pane-1" class="editor-split-pane flex-1">
+          <div id="pane1-header" class="split-pane-header hidden">
+            <span class="split-pane-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+              PANE 1
+            </span>
+            <select id="pane1-file-select" class="split-file-select" title="Switch Pane 1 Document">
+              <option value="">-- Select Document --</option>
+            </select>
+          </div>
+          <div id="editor-container" class="editor-pane-body"></div>
+        </div>
 
         <!-- Draggable Split View Resizer -->
         <div id="split-resizer" class="resizer hidden" title="Drag to resize split editors"></div>
@@ -174,15 +186,16 @@
           <div class="split-pane-header">
             <span class="split-pane-title">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
-              SPLIT PANE
+              PANE 2
             </span>
-            <select id="split-pane-file-select" class="split-file-select" title="Switch Split Pane Document">
-              <option value="">-- Select File to View --</option>
+            <select id="pane2-file-select" class="split-file-select" title="Switch Pane 2 Document">
+              <option value="">-- Select Document --</option>
             </select>
             <button id="btn-close-split" class="preview-close-btn" title="Close Split Pane">✕</button>
           </div>
           <div id="editor-container-2" class="editor-pane-body"></div>
         </div>
+
 
         <div id="preview-resizer" class="resizer hidden" title="Drag to resize editor & preview"></div>
 

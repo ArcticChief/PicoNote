@@ -583,6 +583,13 @@ body, html {
   font-weight: 600;
 }
 
+.tb-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
 .tb-btn.icon-only {
   padding: 3px 6px;
 }
