@@ -339,11 +339,11 @@ class PicoNoteApp {
     });
 
     // Drag & Drop File / Tab onto Split Panes
-    const editorContainerSplit = document.getElementById('editor-container-split');
+    const workspaceContainer = document.getElementById('workspace');
     const pane1 = document.getElementById('editor-pane-1');
     const pane2 = document.getElementById('editor-pane-2');
 
-    if (editorContainerSplit) {
+    if (workspaceContainer) {
       const handleDragOver = (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -367,7 +367,7 @@ class PicoNoteApp {
       };
 
       const handleDragLeave = (e: DragEvent) => {
-        const rect = editorContainerSplit.getBoundingClientRect();
+        const rect = workspaceContainer.getBoundingClientRect();
         if (
           e.clientX <= rect.left ||
           e.clientX >= rect.right ||
@@ -433,10 +433,12 @@ class PicoNoteApp {
         }
       };
 
-      editorContainerSplit.addEventListener('dragover', handleDragOver, true);
-      editorContainerSplit.addEventListener('dragleave', handleDragLeave, true);
-      editorContainerSplit.addEventListener('drop', handleDrop, true);
+      workspaceContainer.addEventListener('dragover', handleDragOver, true);
+      workspaceContainer.addEventListener('dragleave', handleDragLeave, true);
+      workspaceContainer.addEventListener('drop', handleDrop, true);
     }
+
+
 
 
 
