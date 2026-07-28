@@ -932,11 +932,12 @@ body, html {
   position: relative;
 }
 
-.editor-split-pane.hidden {
+.editor-split-pane.hidden, .split-pane-header.hidden, .hidden {
   display: none !important;
 }
 
 .split-pane-header {
+
   display: flex;
   align-items: center;
   justify-content: space-between;

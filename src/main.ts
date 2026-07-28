@@ -1566,6 +1566,7 @@ class PicoNoteApp {
       }
 
       pane1Header?.classList.remove('hidden');
+      if (pane1Header) pane1Header.style.display = 'flex';
       pane2?.classList.remove('hidden');
       resizer?.classList.remove('hidden');
       btn?.classList.add('active');
@@ -1592,9 +1593,11 @@ class PicoNoteApp {
       }
 
       pane1Header?.classList.add('hidden');
+      if (pane1Header) pane1Header.style.display = 'none';
       pane2?.classList.add('hidden');
       resizer?.classList.add('hidden');
       btn?.classList.remove('active');
+
       const pane1 = document.getElementById('editor-pane-1');
       if (pane1) {
         pane1.style.width = '';
