@@ -339,41 +339,62 @@ class PicoNoteApp {
     });
 
     // Drag & Drop File / Tab onto Split Panes
+    const editorContainerSplit = document.getElementById('editor-container-split');
     const pane1 = document.getElementById('editor-pane-1');
     const pane2 = document.getElementById('editor-pane-2');
 
-    [pane1, pane2].forEach((pane, index) => {
-      if (!pane) return;
-
+    if (editorContainerSplit) {
       const handleDragOver = (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (e.dataTransfer) {
           e.dataTransfer.dropEffect = 'copy';
         }
-        pane.classList.add('drag-over-pane');
+
+        const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+        const isPane2 = !!(
+          targetEl?.closest('#editor-pane-2') ||
+          (this.isSplitView && pane1 && e.clientX > pane1.getBoundingClientRect().right)
+        );
+
+        if (isPane2) {
+          pane1?.classList.remove('drag-over-pane');
+          pane2?.classList.add('drag-over-pane');
+        } else {
+          pane2?.classList.remove('drag-over-pane');
+          pane1?.classList.add('drag-over-pane');
+        }
       };
 
       const handleDragLeave = (e: DragEvent) => {
-        const rect = pane.getBoundingClientRect();
+        const rect = editorContainerSplit.getBoundingClientRect();
         if (
           e.clientX <= rect.left ||
           e.clientX >= rect.right ||
           e.clientY <= rect.top ||
           e.clientY >= rect.bottom
         ) {
-          pane.classList.remove('drag-over-pane');
+          pane1?.classList.remove('drag-over-pane');
+          pane2?.classList.remove('drag-over-pane');
         }
       };
 
       const handleDrop = async (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        pane.classList.remove('drag-over-pane');
+
+        pane1?.classList.remove('drag-over-pane');
+        pane2?.classList.remove('drag-over-pane');
 
         const explorerPath = getDraggedExplorerItemPath();
         const dropData = explorerPath || e.dataTransfer?.getData('text/plain');
         if (!dropData) return;
+
+        const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+        const isPane2 = !!(
+          targetEl?.closest('#editor-pane-2') ||
+          (this.isSplitView && pane1 && e.clientX > pane1.getBoundingClientRect().right)
+        );
 
         const tabById = this.tabManager.getTabs().find((t) => t.id === dropData || t.path === dropData);
         let filePath = tabById ? (tabById.path || null) : dropData;
@@ -396,11 +417,7 @@ class PicoNoteApp {
           }
         }
 
-        if (index === 0) {
-          if (tabId) {
-            this.tabManager.setActiveTab(tabId);
-          }
-        } else {
+        if (isPane2) {
           if (!this.isSplitView) {
             this.toggleSplitView();
           }
@@ -409,13 +426,18 @@ class PicoNoteApp {
             await this.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
             this.checkSplitPaneReadOnly();
           }
+        } else {
+          if (tabId) {
+            this.tabManager.setActiveTab(tabId);
+          }
         }
       };
 
-      pane.addEventListener('dragover', handleDragOver, true);
-      pane.addEventListener('dragleave', handleDragLeave, true);
-      pane.addEventListener('drop', handleDrop, true);
-    });
+      editorContainerSplit.addEventListener('dragover', handleDragOver, true);
+      editorContainerSplit.addEventListener('dragleave', handleDragLeave, true);
+      editorContainerSplit.addEventListener('drop', handleDrop, true);
+    }
+
 
 
 
