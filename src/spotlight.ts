@@ -1,5 +1,6 @@
 import { api } from './api';
 import { SearchResult } from './types';
+import { escapeHtml } from './util';
 
 export class SpotlightSearch {
   private overlayEl: HTMLElement;
@@ -139,17 +140,4 @@ export class SpotlightSearch {
       this.resultsEl.appendChild(el);
     });
   }
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/[&<>"']/g, (m) => {
-    switch (m) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return m;
-    }
-  });
 }

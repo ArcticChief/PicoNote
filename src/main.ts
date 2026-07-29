@@ -2,6 +2,9 @@ import { api } from './api';
 
 import { CodeMirrorEditor } from './editor';
 import { FileExplorer, getDraggedExplorerItemPath } from './explorer';
+import { ImageViewerController } from './imageViewer';
+import { SplitViewController } from './splitView';
+import { TabBarView } from './tabBar';
 
 import { parseMarkdown, renderFrontmatterHtml } from './markdown';
 import { formatMarkdown } from './formatter';
@@ -10,21 +13,7 @@ import { CommandPalette } from './palette';
 import { SpotlightSearch } from './spotlight';
 import { TabManager } from './tabs';
 import { ThemeManager } from './theme';
-import { Tab, TabGroup } from './types';
-
-
-function escapeHtml(str: string): string {
-  return str.replace(/[&<>"']/g, (m) => {
-    switch (m) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return m;
-    }
-  });
-}
+import { Tab } from './types';
 
 
 class PicoNoteApp {
@@ -34,9 +23,7 @@ class PicoNoteApp {
   private palette!: CommandPalette;
   private spotlight!: SpotlightSearch;
   private explorer!: FileExplorer;
-  private editor2: CodeMirrorEditor | null = null;
-  private isSplitView: boolean = false;
-  private pane2Path: string | null = null;
+  private splitView!: SplitViewController;
   private autoSaveEnabled: boolean = true;
   private autoSaveTimer: any = null;
 
@@ -44,20 +31,11 @@ class PicoNoteApp {
   private fileWatchInterval: any = null;
   private externalCheckInFlight: boolean = false;
   private toastTimer: any = null;
-  private currentImageUrl: string | null = null;
   private previewImageUrls: string[] = [];
   private livePanesTimer: any = null;
 
-  private imageZoom: number = 1.0;
-  private imageRotation: number = 0;
-  private imageBgMode: 'dark' | 'light' | 'checkerboard' = 'dark';
-  private imagePanX: number = 0;
-  private imagePanY: number = 0;
-  private isImagePanning: boolean = false;
-  private imagePanStart: { x: number; y: number } = { x: 0, y: 0 };
-
-
-
+  private imageViewer!: ImageViewerController;
+  private tabBar!: TabBarView;
 
   private previewVisible: boolean = false;
   private outlineVisible: boolean = false;
@@ -69,7 +47,6 @@ class PicoNoteApp {
   private outlineList: HTMLElement;
   private welcomeScreen: HTMLElement;
   private setupModal: HTMLElement;
-  private tabsContainer: HTMLElement;
 
   private statusFilename: HTMLElement;
   private statusCursor: HTMLElement;
@@ -82,7 +59,6 @@ class PicoNoteApp {
     this.outlineList = document.getElementById('outline-list') as HTMLElement;
     this.welcomeScreen = document.getElementById('welcome-screen') as HTMLElement;
     this.setupModal = document.getElementById('setup-modal') as HTMLElement;
-    this.tabsContainer = document.getElementById('tabs-container') as HTMLElement;
 
     this.statusFilename = document.getElementById('status-filename') as HTMLElement;
     this.statusCursor = document.getElementById('status-cursor') as HTMLElement;
@@ -105,7 +81,7 @@ class PicoNoteApp {
         this.saveSessionState();
       },
       (tabs, groups) => {
-        this.renderTabs(tabs, groups);
+        this.tabBar.render(tabs, groups);
         this.saveSessionState();
       }
     );
@@ -121,6 +97,28 @@ class PicoNoteApp {
       (path) => this.tabManager.handleExternalDelete(path)
     );
 
+
+    this.imageViewer = new ImageViewerController(
+      (message, variant) => this.showToast(message, variant),
+      () => this.tabManager.getActiveTab()
+    );
+
+    this.splitView = new SplitViewController({
+      tabManager: this.tabManager,
+      getMainEditor: () => this.editor,
+      isDark: () => this.themeManager.getTheme() === 'dark',
+      isAutoSaveEnabled: () => this.autoSaveEnabled,
+      isDiskNewer: (tab) => this.isDiskNewer(tab),
+      refreshTabDiskMtime: (tab) => this.refreshTabDiskMtime(tab),
+      showExternalChangeBanner: (tab) => this.showExternalChangeBanner(tab),
+    });
+
+    this.tabBar = new TabBarView({
+      tabManager: this.tabManager,
+      requestCloseTab: (id) => this.requestCloseTab(id),
+      requestBulkClose: (willClose, run) => this.requestBulkClose(willClose, run),
+      newFile: () => this.newFile(),
+    });
 
     this.palette = new CommandPalette();
     this.spotlight = new SpotlightSearch(
@@ -232,7 +230,7 @@ class PicoNoteApp {
       if (this.fileWatchInterval) clearInterval(this.fileWatchInterval);
       if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
       if (this.livePanesTimer) clearTimeout(this.livePanesTimer);
-      if (this.currentImageUrl) URL.revokeObjectURL(this.currentImageUrl);
+      this.imageViewer.dispose();
       this.releasePreviewImageUrls();
     });
 
@@ -394,15 +392,15 @@ class PicoNoteApp {
       if (val) {
         const tab = this.tabManager.getTabs().find((t) => t.id === val || t.path === val);
         if (tab) {
-          this.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
+          this.splitView.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
         }
       }
     });
 
-    document.getElementById('btn-sync-pane2')?.addEventListener('click', () => this.syncPane2ToLatest());
+    document.getElementById('btn-sync-pane2')?.addEventListener('click', () => this.splitView.syncToLatest());
     document.getElementById('pane2-parity-badge')?.addEventListener('click', () => {
       if (document.getElementById('pane2-parity-badge')?.classList.contains('out-of-sync')) {
-        this.syncPane2ToLatest();
+        this.splitView.syncToLatest();
       }
     });
 
@@ -448,7 +446,7 @@ class PicoNoteApp {
         if (!tabById && filePath) {
           const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
           if (this.isImageFile(filename)) {
-            const t = this.tabManager.findOrOpenTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`, !isPane2);
+            const t = this.tabManager.findOrOpenTab(filePath, filename, '', !isPane2, 'image');
             tabId = t.id;
           } else {
             try {
@@ -463,12 +461,12 @@ class PicoNoteApp {
         }
 
         if (isPane2) {
-          if (!this.isSplitView) {
+          if (!this.splitView.isActive()) {
             this.toggleSplitView();
           }
           const targetTab = tabId ? this.tabManager.getTabs().find((t) => t.id === tabId) : null;
           if (targetTab) {
-            await this.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
+            await this.splitView.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
           }
         } else {
           if (tabId) {
@@ -478,25 +476,7 @@ class PicoNoteApp {
       });
     });
 
-    // Tabs Toolbar Right-Click Context Menu
-    this.tabsContainer.addEventListener('contextmenu', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.tabsContainer || target.id === 'editor-tabs-bar' || target.id === 'tabs-container') {
-        e.preventDefault();
-        e.stopPropagation();
-        this.showTabsBarContextMenu(e.clientX, e.clientY);
-      }
-    });
-
-    const tabsBar = document.getElementById('editor-tabs-bar');
-    tabsBar?.addEventListener('contextmenu', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === tabsBar || target.classList.contains('tabs-left') || target.classList.contains('tabs-scroll')) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.showTabsBarContextMenu(e.clientX, e.clientY);
-      }
-    });
+    // Tab bar rendering, context menus, dropdown, and scrolling live in TabBarView.
 
     // Buttons
     document.getElementById('btn-open-folder')?.addEventListener('click', () => this.openFolderDialog());
@@ -549,95 +529,13 @@ class PicoNoteApp {
     document.getElementById('btn-outline-toggle')?.addEventListener('click', () => this.toggleOutline());
     document.getElementById('btn-theme-toggle')?.addEventListener('click', () => this.toggleTheme());
 
-    // Image Viewer Canvas Controls
-    document.getElementById('img-btn-zoom-in')?.addEventListener('click', () => this.setImageZoom(this.imageZoom + 0.25));
-    document.getElementById('img-btn-zoom-out')?.addEventListener('click', () => this.setImageZoom(this.imageZoom - 0.25));
-    document.getElementById('img-btn-zoom-reset')?.addEventListener('click', () => this.resetImageViewer());
-    document.getElementById('img-btn-rotate')?.addEventListener('click', () => this.setImageRotation(this.imageRotation + 90));
-    document.getElementById('img-btn-bg-toggle')?.addEventListener('click', () => this.toggleImageBgMode());
-
-    document.getElementById('img-btn-copy-md')?.addEventListener('click', () => {
-      const activeTab = this.tabManager.getActiveTab();
-      if (activeTab && activeTab.path) {
-        const relativePath = activeTab.path.replace(/\\/g, '/');
-        const tag = `![${activeTab.name}](${relativePath})`;
-        navigator.clipboard.writeText(tag);
-        this.showToast('Markdown Tag Copied 📋');
-      }
-    });
-
-    // Image Canvas Wheel Zoom & Mouse Pan
-    const imgViewport = document.getElementById('image-viewer-viewport');
-    imgViewport?.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.15 : -0.15;
-      this.setImageZoom(this.imageZoom + delta);
-    });
-
-    imgViewport?.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        this.isImagePanning = true;
-        this.imagePanStart = { x: e.clientX - this.imagePanX, y: e.clientY - this.imagePanY };
-      }
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (this.isImagePanning) {
-        this.imagePanX = e.clientX - this.imagePanStart.x;
-        this.imagePanY = e.clientY - this.imagePanStart.y;
-        this.updateImageTransform();
-      }
-    });
-
-    window.addEventListener('mouseup', () => {
-      this.isImagePanning = false;
-    });
+    // Image viewer canvas controls are wired inside ImageViewerController.
 
     document.getElementById('welcome-open-folder')?.addEventListener('click', () => this.setMainWorkspaceFolder());
     document.getElementById('welcome-open-file')?.addEventListener('click', () => this.openFileDialog());
     document.getElementById('welcome-new-file')?.addEventListener('click', () => this.newFile());
 
-    // Tab scroll buttons
-    document.getElementById('btn-tab-scroll-left')?.addEventListener('click', () => {
-      this.tabsContainer.scrollBy({ left: -220, behavior: 'smooth' });
-    });
-
-    document.getElementById('btn-tab-scroll-right')?.addEventListener('click', () => {
-      this.tabsContainer.scrollBy({ left: 220, behavior: 'smooth' });
-    });
-
-    // All open tabs dropdown menu button
-    const allTabsBtn = document.getElementById('btn-all-tabs');
-    const allTabsDropdown = document.getElementById('all-tabs-dropdown');
-    const allTabsSearch = document.getElementById('all-tabs-search') as HTMLInputElement;
-
-    allTabsBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      allTabsDropdown?.classList.toggle('hidden');
-      if (!allTabsDropdown?.classList.contains('hidden')) {
-        allTabsSearch.value = '';
-        allTabsSearch.focus();
-        this.renderAllTabsDropdown('');
-      }
-    });
-
-    allTabsSearch?.addEventListener('input', () => {
-      this.renderAllTabsDropdown(allTabsSearch.value.trim().toLowerCase());
-    });
-
-    document.addEventListener('click', (e) => {
-      if (allTabsDropdown && !allTabsDropdown.contains(e.target as Node) && e.target !== allTabsBtn) {
-        allTabsDropdown.classList.add('hidden');
-      }
-    });
-
-    // Mouse wheel horizontal scrolling for tab bar
-    this.tabsContainer.addEventListener('wheel', (e) => {
-      if (e.deltaY !== 0) {
-        e.preventDefault();
-        this.tabsContainer.scrollLeft += e.deltaY;
-      }
-    });
+    // Tab scrolling and the all-tabs dropdown are wired inside TabBarView.
 
 
     // Keyboard Shortcuts
@@ -775,7 +673,7 @@ class PicoNoteApp {
       try {
         const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
         if (this.isImageFile(filename)) {
-          this.tabManager.openTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`);
+          this.tabManager.openTab(filePath, filename, '', 'image');
           return;
         }
 
@@ -811,6 +709,8 @@ class PicoNoteApp {
   private async saveFile(): Promise<void> {
     const active = this.tabManager.getActiveTab();
     if (!active) return;
+
+    if (active.kind === 'image') return; // nothing to save for image tabs
 
     if (active.readOnlyLossy) {
       this.showToast('This file is read-only (not valid UTF-8 text)', 'error');
@@ -853,7 +753,7 @@ class PicoNoteApp {
 
 
   private togglePreview(): void {
-    if (this.isSplitView) return;
+    if (this.splitView.isActive()) return;
     this.previewVisible = !this.previewVisible;
     const btn = document.getElementById('btn-preview-toggle');
     const resizer = document.getElementById('preview-resizer');
@@ -873,7 +773,7 @@ class PicoNoteApp {
 
 
   private toggleOutline(): void {
-    if (this.isSplitView) return;
+    if (this.splitView.isActive()) return;
     this.outlineVisible = !this.outlineVisible;
     const btn = document.getElementById('btn-outline-toggle');
     if (this.outlineVisible) {
@@ -891,6 +791,7 @@ class PicoNoteApp {
   private toggleTheme(): void {
     const theme = this.themeManager.toggle();
     this.editor.setTheme(theme === 'dark');
+    this.splitView.setTheme(theme === 'dark');
   }
 
   private toggleSidebar(): void {
@@ -904,8 +805,6 @@ class PicoNoteApp {
   private onActiveTabChanged(activeTab: Tab | null): void {
     const titlebarDoc = document.getElementById('titlebar-doc-name');
     const imageViewer = document.getElementById('image-viewer');
-    const imageImg = document.getElementById('image-viewer-img') as HTMLImageElement;
-    const imageInfo = document.getElementById('image-viewer-info');
 
     if (!activeTab) {
       this.welcomeScreen.style.display = 'flex';
@@ -925,52 +824,21 @@ class PicoNoteApp {
     this.explorer.setActiveFilePath(activeTab.path || null);
 
 
-    if (activeTab.content.startsWith('[IMAGE_VIEWER:')) {
-      const filePath = activeTab.content.slice(14, -1);
+    if (activeTab.kind === 'image' && activeTab.path) {
       this.editorContainer.style.display = 'none';
       if (imageViewer) imageViewer.classList.remove('hidden');
-
-      const fallback = document.getElementById('image-viewer-fallback');
-      const fallbackText = document.getElementById('image-viewer-fallback-text');
-
-      // Release the previous blob URL before creating a new one.
-      this.releaseCurrentImageUrl();
-
-      api.getImageDataUrl(filePath).then((dataUrl) => {
-        this.currentImageUrl = dataUrl;
-        if (imageImg) {
-          fallback?.classList.add('hidden');
-          imageImg.style.display = '';
-          imageImg.src = dataUrl;
-          imageImg.onload = () => {
-            if (imageInfo) {
-              imageInfo.textContent = `${activeTab.name} — ${imageImg.naturalWidth} × ${imageImg.naturalHeight} px`;
-            }
-          };
-          imageImg.onerror = () => {
-            this.releaseCurrentImageUrl();
-            imageImg.style.display = 'none';
-            if (fallbackText) fallbackText.textContent = `Image unavailable — ${activeTab.name}`;
-            fallback?.classList.remove('hidden');
-          };
-        }
-      }).catch((err) => {
-        if (imageImg) imageImg.style.display = 'none';
-        if (fallbackText) fallbackText.textContent = `Image unavailable — ${err}`;
-        fallback?.classList.remove('hidden');
-        if (imageInfo) imageInfo.textContent = '';
-      });
+      this.imageViewer.showImage(activeTab.path, activeTab.name);
       return;
     }
 
     // Leaving the image viewer for a text document — free any blob URL.
-    this.releaseCurrentImageUrl();
+    this.imageViewer.hide();
 
     const fmtBar = document.getElementById('formatting-toolbar');
     const ext = activeTab ? (activeTab.name.includes('.') ? activeTab.name.slice(activeTab.name.lastIndexOf('.')).toLowerCase() : '') : '';
     const isMd = ext === '.md' || ext === '.markdown' || !ext;
     if (fmtBar) {
-      if (activeTab && isMd && !activeTab.content.startsWith('[IMAGE_VIEWER:')) {
+      if (activeTab && isMd && activeTab.kind !== 'image') {
         fmtBar.classList.remove('hidden');
       } else {
         fmtBar.classList.add('hidden');
@@ -991,611 +859,10 @@ class PicoNoteApp {
     this.editor.setReadOnly(!!activeTab.readOnlyLossy);
     if (this.previewVisible) this.updateMarkdownPreview(activeTab.content);
     if (this.outlineVisible) this.updateOutline(activeTab.content);
-    if (this.isSplitView) {
-      this.populateSplitFileSelect();
-      this.checkSplitPaneReadOnly();
+    if (this.splitView.isActive()) {
+      this.splitView.populateSelects();
+      this.splitView.checkReadOnly();
     }
-  }
-
-
-
-
-
-
-  private getTabFileIcon(filename: string): string {
-    const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')).toLowerCase() : '';
-    const mdSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
-    const codeSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
-    const configSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
-    const fileSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
-
-    if (ext === '.md' || ext === '.markdown') return mdSvg;
-    if (['.js', '.ts', '.jsx', '.tsx', '.py', '.rs', '.go', '.c', '.cpp', '.h', '.sh', '.html', '.css'].includes(ext)) return codeSvg;
-    if (['.json', '.yaml', '.yml', '.toml', '.xml'].includes(ext)) return configSvg;
-    return fileSvg;
-  }
-
-  private renderTabs(tabs: Tab[], groups: TabGroup[] = []): void {
-    this.tabsContainer.innerHTML = '';
-    const active = this.tabManager.getActiveTab();
-
-    const allTabsText = document.getElementById('btn-all-tabs-text');
-    if (allTabsText) {
-      allTabsText.textContent = `Tabs (${tabs.length})`;
-    }
-
-    // 1. Render Group Containers and their assigned tabs
-
-    groups.forEach((g) => {
-      const groupTabs = tabs.filter((t) => t.groupId === g.id);
-
-      const groupContainer = document.createElement('div');
-      groupContainer.className = `tab-group-container color-${g.color}`;
-
-      const pill = document.createElement('div');
-      pill.className = `tab-group-pill ${g.collapsed ? 'collapsed' : ''}`;
-      pill.title = `Group: ${g.name} (${groupTabs.length} tabs) — Click to ${g.collapsed ? 'expand' : 'collapse'}, Right-click to manage`;
-      pill.innerHTML = `
-        <span class="group-dot color-${g.color}"></span>
-        <span class="group-name">${g.name}</span>
-        <span class="group-count">(${groupTabs.length})</span>
-        <span class="group-arrow">▾</span>
-      `;
-
-      pill.addEventListener('click', () => {
-        this.tabManager.toggleGroupCollapse(g.id);
-      });
-
-      pill.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.showGroupContextMenu(e.clientX, e.clientY, g);
-      });
-
-      // Drag & Drop onto Group Container / Pill to Join Group
-      groupContainer.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        groupContainer.classList.add('drag-over');
-      });
-
-      groupContainer.addEventListener('dragleave', () => {
-        groupContainer.classList.remove('drag-over');
-      });
-
-      groupContainer.addEventListener('drop', (e) => {
-        e.preventDefault();
-        groupContainer.classList.remove('drag-over');
-        const sourceId = e.dataTransfer?.getData('text/plain');
-        if (sourceId) {
-          this.tabManager.assignTabToGroup(sourceId, g.id);
-        }
-      });
-
-      groupContainer.appendChild(pill);
-
-      if (!g.collapsed) {
-        groupTabs.forEach((tab) => {
-          this.appendTabElement(tab, active, g.color, groupContainer);
-        });
-      }
-
-      this.tabsContainer.appendChild(groupContainer);
-    });
-
-    // 2. Render Ungrouped Tabs
-    const ungroupedTabs = tabs.filter((t) => !t.groupId);
-    ungroupedTabs.forEach((tab) => {
-      this.appendTabElement(tab, active);
-    });
-
-    // Auto-scroll active tab into view
-    setTimeout(() => {
-      const activeEl = this.tabsContainer.querySelector('.tab.active') as HTMLElement;
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
-      }
-    }, 50);
-  }
-
-  private appendTabElement(tab: Tab, active: Tab | null, groupColor?: string, targetContainer?: HTMLElement): void {
-    const el = document.createElement('div');
-    const inGroupClass = groupColor ? `in-group-${groupColor}` : '';
-    el.className = `tab ${active && active.id === tab.id ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${inGroupClass}`;
-    el.setAttribute('title', tab.path || tab.name);
-    el.setAttribute('draggable', 'true');
-    if (tab.colorTag) {
-      el.setAttribute('data-color-tag', tab.colorTag);
-    }
-
-    const icon = this.getTabFileIcon(tab.name);
-    el.innerHTML = `
-      <span class="tab-icon">${icon}</span>
-      <span class="tab-title">${escapeHtml(tab.name)}</span>
-      ${tab.pinned ? '<span class="tab-pin-icon" title="Pinned">📌</span>' : ''}
-      ${tab.isDirty ? '<span class="tab-dot" title="Unsaved changes"></span>' : ''}
-      ${!tab.pinned ? `<span class="tab-close" data-id="${tab.id}">&times;</span>` : ''}
-    `;
-
-    // HTML5 Drag & Drop Reordering & Grouping
-    el.addEventListener('dragstart', (e) => {
-      e.dataTransfer?.setData('text/plain', tab.id);
-      el.classList.add('dragging');
-    });
-
-    el.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-      el.classList.add('drag-over');
-    });
-
-    el.addEventListener('dragleave', (e) => {
-      e.stopPropagation();
-      el.classList.remove('drag-over');
-    });
-
-    el.addEventListener('drop', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      el.classList.remove('drag-over');
-      const sourceId = e.dataTransfer?.getData('text/plain');
-      if (sourceId && sourceId !== tab.id) {
-        this.tabManager.reorderTab(sourceId, tab.id);
-        this.tabManager.assignTabToGroup(sourceId, tab.groupId || null);
-      }
-    });
-
-    el.addEventListener('dragend', () => {
-      document.querySelectorAll('.tab, .tab-group-pill, .tab-group-container').forEach((t) => {
-        t.classList.remove('dragging', 'drag-over');
-      });
-    });
-
-    el.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.classList.contains('tab-close')) {
-        e.stopPropagation();
-        this.requestCloseTab(tab.id);
-      } else {
-        this.tabManager.setActiveTab(tab.id);
-      }
-    });
-
-    el.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.showTabContextMenu(e.clientX, e.clientY, tab);
-    });
-
-    if (targetContainer) {
-      targetContainer.appendChild(el);
-    } else {
-      this.tabsContainer.appendChild(el);
-    }
-  }
-
-  private renderAllTabsDropdown(query: string = ''): void {
-
-    const listEl = document.getElementById('all-tabs-list');
-    if (!listEl) return;
-    listEl.innerHTML = '';
-
-    const tabs = this.tabManager.getTabs();
-    const active = this.tabManager.getActiveTab();
-
-    const filtered = tabs.filter(
-      (t) => t.name.toLowerCase().includes(query) || (t.path && t.path.toLowerCase().includes(query))
-    );
-
-    if (filtered.length === 0) {
-      listEl.innerHTML = '<div class="welcome-msg">No matching open tabs</div>';
-      return;
-    }
-
-    filtered.forEach((tab) => {
-      const item = document.createElement('div');
-      item.className = `tabs-dropdown-item ${active && active.id === tab.id ? 'active' : ''}`;
-      const icon = this.getTabFileIcon(tab.name);
-
-      item.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
-          <span>${icon}</span>
-          <span style="font-weight:600; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${escapeHtml(tab.name)}</span>
-          ${tab.pinned ? '📌' : ''}
-          ${tab.isDirty ? '●' : ''}
-        </div>
-        <span class="tab-close" data-id="${tab.id}">&times;</span>
-      `;
-
-      item.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        if (target.classList.contains('tab-close')) {
-          e.stopPropagation();
-          this.requestCloseTab(tab.id).then(() => this.renderAllTabsDropdown(query));
-        } else {
-          this.tabManager.setActiveTab(tab.id);
-          document.getElementById('all-tabs-dropdown')?.classList.add('hidden');
-        }
-      });
-
-      listEl.appendChild(item);
-    });
-  }
-
-
-  private showTabContextMenu(x: number, y: number, tab: Tab): void {
-    const existing = document.getElementById('context-menu');
-    if (existing) existing.remove();
-
-    const groups = this.tabManager.getGroups();
-
-    const menu = document.createElement('div');
-    menu.id = 'context-menu';
-
-    let groupsHtml = '';
-    if (groups.length > 0) {
-      groupsHtml += `<div class="ctx-divider"></div>`;
-      groups.forEach((g) => {
-        if (tab.groupId !== g.id) {
-          groupsHtml += `<div class="ctx-item tab-ctx-assign-grp" data-grp-id="${g.id}">📂 Move to Group: ${g.name}</div>`;
-        }
-      });
-    }
-
-    menu.innerHTML = `
-      <div class="ctx-item" id="tab-ctx-pin">${tab.pinned ? '📌 Unpin Tab' : '📌 Pin Tab'}</div>
-      <div class="ctx-divider"></div>
-      <div class="ctx-item" id="tab-ctx-new-grp">📁 Create New Tab Group...</div>
-      ${tab.groupId ? '<div class="ctx-item" id="tab-ctx-ungrp">🚫 Remove from Group</div>' : ''}
-      ${groupsHtml}
-      <div class="ctx-divider"></div>
-      <div class="ctx-item" id="tab-ctx-color-purple">🟣 Purple Tag</div>
-      <div class="ctx-item" id="tab-ctx-color-blue">🔵 Blue Tag</div>
-      <div class="ctx-item" id="tab-ctx-color-green">🟢 Green Tag</div>
-      <div class="ctx-item" id="tab-ctx-color-amber">🟠 Amber Tag</div>
-      <div class="ctx-item" id="tab-ctx-color-red">🔴 Red Tag</div>
-      <div class="ctx-item" id="tab-ctx-color-none">⚪ Remove Color Tag</div>
-      <div class="ctx-divider"></div>
-      <div class="ctx-item" id="tab-ctx-close-others">🚫 Close Other Tabs</div>
-      <div class="ctx-item" id="tab-ctx-close-right">➡️ Close Tabs to Right</div>
-      <div class="ctx-item danger" id="tab-ctx-close">❌ Close Tab</div>
-    `;
-
-    document.body.appendChild(menu);
-
-    const rect = menu.getBoundingClientRect();
-    const margin = 10;
-
-    let posX = x;
-    let posY = y;
-
-    if (posX + rect.width > window.innerWidth - margin) {
-      posX = window.innerWidth - rect.width - margin;
-    }
-    if (posY + rect.height > window.innerHeight - margin) {
-      posY = window.innerHeight - rect.height - margin;
-    }
-
-    menu.style.left = `${Math.max(margin, posX)}px`;
-    menu.style.top = `${Math.max(margin, posY)}px`;
-
-    const closeCtx = () => menu.remove();
-    setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
-
-    menu.querySelector('#tab-ctx-pin')?.addEventListener('click', () => {
-      this.tabManager.togglePin(tab.id);
-    });
-
-    menu.querySelector('#tab-ctx-new-grp')?.addEventListener('click', () => {
-      this.promptNewGroup(tab.id);
-    });
-
-    menu.querySelector('#tab-ctx-ungrp')?.addEventListener('click', () => {
-      this.tabManager.assignTabToGroup(tab.id, null);
-    });
-
-    menu.querySelectorAll('.tab-ctx-assign-grp').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const grpId = (e.currentTarget as HTMLElement).getAttribute('data-grp-id');
-        if (grpId) {
-          this.tabManager.assignTabToGroup(tab.id, grpId);
-        }
-      });
-    });
-
-    menu.querySelector('#tab-ctx-color-purple')?.addEventListener('click', () => {
-      this.tabManager.setColorTag(tab.id, 'purple');
-    });
-    menu.querySelector('#tab-ctx-color-blue')?.addEventListener('click', () => {
-      this.tabManager.setColorTag(tab.id, 'blue');
-    });
-    menu.querySelector('#tab-ctx-color-green')?.addEventListener('click', () => {
-      this.tabManager.setColorTag(tab.id, 'green');
-    });
-    menu.querySelector('#tab-ctx-color-amber')?.addEventListener('click', () => {
-      this.tabManager.setColorTag(tab.id, 'amber');
-    });
-    menu.querySelector('#tab-ctx-color-red')?.addEventListener('click', () => {
-      this.tabManager.setColorTag(tab.id, 'red');
-    });
-    menu.querySelector('#tab-ctx-color-none')?.addEventListener('click', () => {
-      this.tabManager.setColorTag(tab.id, undefined);
-    });
-    menu.querySelector('#tab-ctx-close-others')?.addEventListener('click', () => {
-      const willClose = this.tabManager.getTabs().filter((t) => t.id !== tab.id && !t.pinned);
-      this.requestBulkClose(willClose, () => this.tabManager.closeOtherTabs(tab.id));
-    });
-    menu.querySelector('#tab-ctx-close-right')?.addEventListener('click', () => {
-      const tabs = this.tabManager.getTabs();
-      const idx = tabs.findIndex((t) => t.id === tab.id);
-      const willClose = idx === -1 ? [] : tabs.filter((t, i) => i > idx && !t.pinned);
-      this.requestBulkClose(willClose, () => this.tabManager.closeTabsToRight(tab.id));
-    });
-    menu.querySelector('#tab-ctx-close')?.addEventListener('click', () => {
-      this.requestCloseTab(tab.id);
-    });
-  }
-
-  private showGroupContextMenu(x: number, y: number, group: TabGroup): void {
-    const existing = document.getElementById('context-menu');
-    if (existing) existing.remove();
-
-    const menu = document.createElement('div');
-    menu.id = 'context-menu';
-
-    menu.innerHTML = `
-      <div class="ctx-item" id="grp-ctx-rename">✏️ Rename Group...</div>
-      <div class="ctx-divider"></div>
-      <div class="ctx-item" id="grp-ctx-color-purple">🟣 Purple Accent</div>
-      <div class="ctx-item" id="grp-ctx-color-blue">🔵 Blue Accent</div>
-      <div class="ctx-item" id="grp-ctx-color-emerald">🟢 Emerald Accent</div>
-      <div class="ctx-item" id="grp-ctx-color-amber">🟠 Amber Accent</div>
-      <div class="ctx-item" id="grp-ctx-color-rose">🔴 Rose Accent</div>
-      <div class="ctx-divider"></div>
-      <div class="ctx-item" id="grp-ctx-toggle">${group.collapsed ? '▸ Expand Group' : '▾ Collapse Group'}</div>
-      <div class="ctx-item" id="grp-ctx-ungroup-all">📂 Ungroup All Tabs</div>
-      <div class="ctx-item danger" id="grp-ctx-close-tabs">❌ Close All Tabs in Group</div>
-    `;
-
-    document.body.appendChild(menu);
-
-    const rect = menu.getBoundingClientRect();
-    const margin = 10;
-
-    let posX = x;
-    let posY = y;
-
-    if (posX + rect.width > window.innerWidth - margin) {
-      posX = window.innerWidth - rect.width - margin;
-    }
-    if (posY + rect.height > window.innerHeight - margin) {
-      posY = window.innerHeight - rect.height - margin;
-    }
-
-    menu.style.left = `${Math.max(margin, posX)}px`;
-    menu.style.top = `${Math.max(margin, posY)}px`;
-
-    const closeCtx = () => menu.remove();
-    setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
-
-    menu.querySelector('#grp-ctx-rename')?.addEventListener('click', () => {
-      this.promptRenameGroup(group);
-    });
-
-    menu.querySelector('#grp-ctx-color-purple')?.addEventListener('click', () => {
-      this.tabManager.setGroupColor(group.id, 'purple');
-    });
-    menu.querySelector('#grp-ctx-color-blue')?.addEventListener('click', () => {
-      this.tabManager.setGroupColor(group.id, 'blue');
-    });
-    menu.querySelector('#grp-ctx-color-emerald')?.addEventListener('click', () => {
-      this.tabManager.setGroupColor(group.id, 'emerald');
-    });
-    menu.querySelector('#grp-ctx-color-amber')?.addEventListener('click', () => {
-      this.tabManager.setGroupColor(group.id, 'amber');
-    });
-    menu.querySelector('#grp-ctx-color-rose')?.addEventListener('click', () => {
-      this.tabManager.setGroupColor(group.id, 'rose');
-    });
-
-    menu.querySelector('#grp-ctx-toggle')?.addEventListener('click', () => {
-      this.tabManager.toggleGroupCollapse(group.id);
-    });
-
-    menu.querySelector('#grp-ctx-ungroup-all')?.addEventListener('click', () => {
-      this.tabManager.removeGroup(group.id, false);
-    });
-
-    menu.querySelector('#grp-ctx-close-tabs')?.addEventListener('click', () => {
-      this.tabManager.removeGroup(group.id, true);
-    });
-  }
-
-  private promptNewGroup(defaultTabId?: string): void {
-    const existing = document.getElementById('new-group-modal');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'new-group-modal';
-    overlay.className = 'modal-overlay';
-
-    overlay.innerHTML = `
-      <div class="modal-content glass-panel" style="max-width: 360px; padding: 20px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-          <h3 style="margin:0; font-size:14px; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-            Create Tab Group
-          </h3>
-          <button id="close-grp-modal" class="preview-close-btn">&times;</button>
-        </div>
-
-        <div style="margin-bottom: 14px;">
-          <label style="display:block; font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:6px;">GROUP NAME</label>
-          <input type="text" id="grp-name-input" class="search-input" placeholder="e.g. Project Docs, Ideas..." style="width:100%; box-sizing:border-box;" autofocus />
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <label style="display:block; font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:8px;">ACCENT COLOR</label>
-          <div style="display:flex; gap:10px;" id="grp-color-picker">
-            <button type="button" class="color-opt-btn" data-color="purple" style="background:#818cf8; border:2px solid #fff; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="blue" style="background:#38bdf8; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="emerald" style="background:#34d399; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="amber" style="background:#fbbf24; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="rose" style="background:#f43f5e; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-          </div>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button id="cancel-grp-btn" class="tb-btn" style="padding:6px 12px; font-size:12px;">Cancel</button>
-          <button id="confirm-grp-btn" class="tb-btn" style="background:var(--accent-gradient); color:#fff; padding:6px 14px; font-size:12px; border:none;">Create Group</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    let selectedColor = 'purple';
-    const input = overlay.querySelector('#grp-name-input') as HTMLInputElement;
-    input.focus();
-
-    overlay.querySelectorAll('.color-opt-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        overlay.querySelectorAll('.color-opt-btn').forEach((b) => ((b as HTMLElement).style.border = 'none'));
-        (btn as HTMLElement).style.border = '2px solid #fff';
-        selectedColor = btn.getAttribute('data-color') || 'purple';
-      });
-    });
-
-    const submit = () => {
-      const name = input.value.trim() || 'New Group';
-      const grp = this.tabManager.createGroup(name, selectedColor);
-      if (defaultTabId) {
-        this.tabManager.assignTabToGroup(defaultTabId, grp.id);
-      }
-      overlay.remove();
-    };
-
-    overlay.querySelector('#confirm-grp-btn')?.addEventListener('click', submit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submit();
-      if (e.key === 'Escape') overlay.remove();
-    });
-
-    overlay.querySelector('#close-grp-modal')?.addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#cancel-grp-btn')?.addEventListener('click', () => overlay.remove());
-  }
-
-  private promptRenameGroup(group: TabGroup): void {
-    const existing = document.getElementById('new-group-modal');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'new-group-modal';
-    overlay.className = 'modal-overlay';
-
-    overlay.innerHTML = `
-      <div class="modal-content glass-panel" style="max-width: 340px; padding: 20px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-          <h3 style="margin:0; font-size:14px; font-weight:700; color:var(--text-primary);">Rename Group</h3>
-          <button id="close-grp-modal" class="preview-close-btn">&times;</button>
-        </div>
-
-        <div style="margin-bottom: 16px;">
-          <input type="text" id="grp-name-input" class="search-input" value="${group.name}" style="width:100%; box-sizing:border-box;" autofocus />
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button id="cancel-grp-btn" class="tb-btn" style="padding:6px 12px; font-size:12px;">Cancel</button>
-          <button id="confirm-grp-btn" class="tb-btn" style="background:var(--accent-gradient); color:#fff; padding:6px 14px; font-size:12px; border:none;">Save</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    const input = overlay.querySelector('#grp-name-input') as HTMLInputElement;
-    input.focus();
-    input.select();
-
-    const submit = () => {
-      const name = input.value.trim();
-      if (name) {
-        this.tabManager.renameGroup(group.id, name);
-      }
-      overlay.remove();
-    };
-
-    overlay.querySelector('#confirm-grp-btn')?.addEventListener('click', submit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submit();
-      if (e.key === 'Escape') overlay.remove();
-    });
-
-    overlay.querySelector('#close-grp-modal')?.addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#cancel-grp-btn')?.addEventListener('click', () => overlay.remove());
-  }
-
-  private showTabsBarContextMenu(x: number, y: number): void {
-    const existing = document.getElementById('context-menu');
-    if (existing) existing.remove();
-
-    const groups = this.tabManager.getGroups();
-
-    const menu = document.createElement('div');
-    menu.id = 'context-menu';
-
-    menu.innerHTML = `
-      <div class="ctx-item" id="tabsbar-ctx-new-group">📁 Create New Empty Group...</div>
-      <div class="ctx-item" id="tabsbar-ctx-new-tab">➕ New Tab</div>
-      ${groups.length > 0 ? '<div class="ctx-divider"></div><div class="ctx-item" id="tabsbar-ctx-toggle-groups">↕️ Toggle Collapse / Expand All Groups</div>' : ''}
-      <div class="ctx-divider"></div>
-      <div class="ctx-item danger" id="tabsbar-ctx-close-all">❌ Close All Unpinned Tabs</div>
-    `;
-
-    document.body.appendChild(menu);
-
-    const rect = menu.getBoundingClientRect();
-    const margin = 10;
-
-    let posX = x;
-    let posY = y;
-
-    if (posX + rect.width > window.innerWidth - margin) {
-      posX = window.innerWidth - rect.width - margin;
-    }
-    if (posY + rect.height > window.innerHeight - margin) {
-      posY = window.innerHeight - rect.height - margin;
-    }
-
-    menu.style.left = `${Math.max(margin, posX)}px`;
-    menu.style.top = `${Math.max(margin, posY)}px`;
-
-    const closeCtx = () => menu.remove();
-    setTimeout(() => document.addEventListener('click', closeCtx, { once: true }), 10);
-
-    menu.querySelector('#tabsbar-ctx-new-group')?.addEventListener('click', () => {
-      this.promptNewGroup();
-    });
-
-    menu.querySelector('#tabsbar-ctx-new-tab')?.addEventListener('click', () => {
-      this.newFile();
-    });
-
-    menu.querySelector('#tabsbar-ctx-toggle-groups')?.addEventListener('click', () => {
-      const groups = this.tabManager.getGroups();
-      const anyExpanded = groups.some((g) => !g.collapsed);
-      groups.forEach((g) => {
-        if (g.collapsed !== anyExpanded) {
-          this.tabManager.toggleGroupCollapse(g.id);
-        }
-      });
-    });
-
-    menu.querySelector('#tabsbar-ctx-close-all')?.addEventListener('click', () => {
-      const willClose = this.tabManager.getTabs().filter((t) => !t.pinned);
-      this.requestBulkClose(willClose, () => this.tabManager.closeAllTabs());
-    });
   }
 
   private saveSessionState(): void {
@@ -1605,8 +872,8 @@ class PicoNoteApp {
         tabs: tabSession.tabs,
         groups: tabSession.groups,
         activeTabId: tabSession.activeTabId,
-        isSplitView: this.isSplitView,
-        pane2Path: this.pane2Path,
+        isSplitView: this.splitView.isActive(),
+        pane2Path: this.splitView.pane2TabId,
         timestamp: Date.now(),
       };
       localStorage.setItem('piconote_workspace_session_v1', JSON.stringify(state));
@@ -1623,11 +890,22 @@ class PicoNoteApp {
       const state = JSON.parse(raw);
       if (!state || !state.tabs || !Array.isArray(state.tabs) || state.tabs.length === 0) return false;
 
+      // Backfill `kind` for sessions saved before it existed (they stored the
+      // old [IMAGE_VIEWER:...] sentinel in content).
+      for (const tab of state.tabs as Tab[]) {
+        if (!tab.kind) {
+          tab.kind = typeof tab.content === 'string' && tab.content.startsWith('[IMAGE_VIEWER:')
+            ? 'image'
+            : 'text';
+        }
+        if (tab.kind === 'image') tab.content = '';
+      }
+
       // Re-read file contents for disk files (in parallel) to ensure freshness,
-      // preserving unsaved changes.
+      // preserving unsaved changes. Image tabs render from `path`, so skip them.
       await Promise.all(
         (state.tabs as Tab[]).map(async (tab) => {
-          if (!tab.path) return;
+          if (!tab.path || tab.kind === 'image') return;
           try {
             if (!tab.isDirty) {
               // Clean tab: trust disk and re-baseline mtime.
@@ -1672,7 +950,7 @@ class PicoNoteApp {
         if (state.pane2Path) {
           const p2Tab = state.tabs.find((t: Tab) => t.path === state.pane2Path || t.id === state.pane2Path);
           if (p2Tab) {
-            this.openInPane2({ id: p2Tab.id, path: p2Tab.path || undefined, name: p2Tab.name });
+            this.splitView.openInPane2({ id: p2Tab.id, path: p2Tab.path || undefined, name: p2Tab.name });
           }
         }
       }
@@ -1784,8 +1062,8 @@ class PicoNoteApp {
       this.tabManager.updateActiveContent(content);
       this.scheduleLivePanes(content);
 
-      if (this.isSplitView && this.editor2) {
-        this.checkSplitPaneReadOnly();
+      if (this.splitView.isActive()) {
+        this.splitView.checkReadOnly();
       }
 
 
@@ -1819,7 +1097,7 @@ class PicoNoteApp {
     let tab = this.tabManager.getTabs().find((t) => t.path === filePath);
     if (!tab) {
       if (this.isImageFile(filename)) {
-        tab = this.tabManager.findOrOpenTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`, false);
+        tab = this.tabManager.findOrOpenTab(filePath, filename, '', false, 'image');
       } else {
         try {
           const content = await api.readFile(filePath);
@@ -1832,194 +1110,26 @@ class PicoNoteApp {
       }
     }
 
-    if (!this.isSplitView) {
+    if (!this.splitView.isActive()) {
       this.toggleSplitView();
     }
 
     if (tab) {
-      await this.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
+      await this.splitView.openInPane2({ id: tab.id, path: tab.path || undefined, name: tab.name });
     }
   }
 
-
-  private syncPane2ToLatest(): void {
-
-    if (!this.isSplitView || !this.editor2) return;
-    const activeTab = this.tabManager.getActiveTab();
-    if (activeTab) {
-      this.editor2.setContent(activeTab.content, activeTab.path || activeTab.name);
-      this.checkSplitPaneReadOnly();
-    }
-  }
-
-  private populateSplitFileSelect(): void {
-    const select1 = document.getElementById('pane1-file-select') as HTMLSelectElement;
-    const select2 = document.getElementById('pane2-file-select') as HTMLSelectElement;
-    if (!select1 || !select2) return;
-
-    const activeTab = this.tabManager.getActiveTab();
-
-    select1.innerHTML = '<option value="">-- Select Document --</option>';
-    select2.innerHTML = '<option value="">-- Select Document --</option>';
-
-    const tabs = this.tabManager.getTabs();
-    tabs.forEach((t) => {
-      const opt1 = document.createElement('option');
-      opt1.value = t.id;
-      opt1.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
-      if (activeTab && t.id === activeTab.id) opt1.selected = true;
-      select1.appendChild(opt1);
-
-      const opt2 = document.createElement('option');
-      opt2.value = t.id;
-      opt2.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
-      if (this.pane2Path && t.id === this.pane2Path) {
-        opt2.selected = true;
-      }
-      select2.appendChild(opt2);
-    });
-
-    if (activeTab) select1.value = activeTab.id;
-    if (this.pane2Path) {
-      const targetTab = tabs.find((t) => t.id === this.pane2Path);
-      if (targetTab) select2.value = targetTab.id;
-    }
-  }
-
-  private checkSplitPaneReadOnly(): void {
-    if (!this.isSplitView || !this.editor2) return;
-
-    const activeTab = this.tabManager.getActiveTab();
-    const isSame = !!(activeTab && this.pane2Path && activeTab.id === this.pane2Path);
-
-    this.editor2.setReadOnly(isSame);
-
-    const badge = document.getElementById('pane2-parity-badge');
-    const syncBtn = document.getElementById('btn-sync-pane2');
-    const pane2Title = document.querySelector('#editor-pane-2 .split-pane-title') as HTMLElement;
-
-    if (isSame && activeTab) {
-      const p1Content = activeTab.content;
-      const p2Content = this.editor2.getContent();
-      const inSync = p1Content === p2Content;
-
-      if (badge) {
-        badge.classList.remove('hidden');
-        if (inSync) {
-          badge.className = 'split-parity-badge in-sync';
-          badge.innerHTML = `<span class="parity-dot"></span><span class="parity-text">In Sync</span>`;
-          badge.title = 'Pane 2 snapshot is identical to Pane 1 (Latest)';
-        } else {
-          badge.className = 'split-parity-badge out-of-sync';
-          badge.innerHTML = `<span class="parity-dot"></span><span class="parity-text">Out of Sync</span>`;
-          badge.title = 'Pane 1 has new changes. Click to sync Pane 2 to latest version.';
-        }
-      }
-
-      if (syncBtn) {
-        if (inSync) {
-          syncBtn.classList.add('hidden');
-        } else {
-          syncBtn.classList.remove('hidden');
-        }
-      }
-
-      if (pane2Title) {
-        pane2Title.innerHTML = `
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-          <span style="color:#fbbf24; font-weight:700;">SNAPSHOT</span>
-        `;
-        pane2Title.title = 'Pane 2 is a static reference snapshot. Click Sync to refresh to latest version.';
-      }
-    } else {
-      if (badge) badge.classList.add('hidden');
-      if (syncBtn) syncBtn.classList.add('hidden');
-      if (pane2Title) {
-        pane2Title.innerHTML = `
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
-          PANE 2
-        `;
-        pane2Title.title = '';
-      }
-    }
-  }
-
-  private async openInPane2(target: { id?: string; path?: string; name: string }): Promise<void> {
-
-    const container2 = document.getElementById('editor-container-2');
-    if (!this.editor2 && container2) {
-      this.editor2 = new CodeMirrorEditor(container2);
-      this.editor2.setTheme(this.themeManager.getTheme() === 'dark');
-    }
-
-    let content = '';
-    const existingTab = target.id
-      ? this.tabManager.getTabs().find((t) => t.id === target.id)
-      : this.tabManager.getTabs().find((t) => t.path === target.path);
-
-    // Track pane 2 strictly by tab id to avoid mismatching files with equal names.
-    this.pane2Path = existingTab ? existingTab.id : (target.id || null);
-
-    if (existingTab) {
-      content = existingTab.content;
-    } else if (target.path) {
-      try {
-        content = await api.readFile(target.path);
-      } catch (err) {
-        console.error('Failed to read file for Pane 2:', err);
-        return;
-      }
-    }
-
-    if (this.editor2) {
-      this.editor2.setContent(content, target.path || target.name);
-      this.checkSplitPaneReadOnly();
-      this.populateSplitFileSelect();
-      this.editor2.setOnChange(async (newContent) => {
-
-        const tab = target.id
-          ? this.tabManager.getTabs().find((t) => t.id === target.id)
-          : this.tabManager.getTabs().find((t) => t.path === target.path);
-
-        if (tab) {
-          tab.content = newContent;
-          tab.isDirty = true;
-        }
-
-        const active = this.tabManager.getActiveTab();
-        if (active && (active.id === target.id || (active.path && active.path === target.path))) {
-          if (this.editor.getContent() !== newContent) {
-            this.editor.setContent(newContent, target.path || target.name);
-          }
-        }
-
-        if (this.autoSaveEnabled && target.path) {
-          const tab2 = this.tabManager.getTabs().find((t) => t.path === target.path);
-          if (tab2 && (await this.isDiskNewer(tab2))) {
-            this.showExternalChangeBanner(tab2);
-          } else {
-            await api.writeFile(target.path, newContent);
-            if (tab2) await this.refreshTabDiskMtime(tab2);
-          }
-        }
-      });
-    }
-  }
-
+  /**
+   * Toggles split mode. The pane mechanics live in SplitViewController; the app
+   * only owns the preview/outline button state that split mode overrides.
+   */
   private toggleSplitView(): void {
-    this.isSplitView = !this.isSplitView;
-    const pane1Header = document.getElementById('pane1-header');
-    const pane2 = document.getElementById('editor-pane-2');
-    const resizer = document.getElementById('split-resizer');
-    const btn = document.getElementById('btn-split-editor');
-
     const btnPreview = document.getElementById('btn-preview-toggle') as HTMLButtonElement | null;
     const btnOutline = document.getElementById('btn-outline-toggle') as HTMLButtonElement | null;
 
-    if (this.isSplitView) {
+    if (!this.splitView.isActive()) {
       if (this.previewVisible) this.togglePreview();
       if (this.outlineVisible) this.toggleOutline();
-
       if (btnPreview) {
         btnPreview.disabled = true;
         btnPreview.title = 'Preview is disabled in Split Mode';
@@ -2028,27 +1138,8 @@ class PicoNoteApp {
         btnOutline.disabled = true;
         btnOutline.title = 'Outline is disabled in Split Mode';
       }
-
-      pane1Header?.classList.remove('hidden');
-      if (pane1Header) pane1Header.style.display = 'flex';
-      pane2?.classList.remove('hidden');
-      resizer?.classList.remove('hidden');
-      btn?.classList.add('active');
-
-      this.populateSplitFileSelect();
-
-      const tabs = this.tabManager.getTabs();
-      const activeTab = this.tabManager.getActiveTab();
-
-      const secondTab = tabs.find((t) => t.id !== activeTab?.id);
-      const targetTab = secondTab || activeTab;
-
-      if (targetTab) {
-        this.openInPane2({ id: targetTab.id, path: targetTab.path || undefined, name: targetTab.name });
-      }
-      this.checkSplitPaneReadOnly();
+      this.splitView.enable();
     } else {
-
       if (btnPreview) {
         btnPreview.disabled = false;
         btnPreview.title = 'Toggle Markdown Preview (Ctrl+Shift+M)';
@@ -2057,31 +1148,13 @@ class PicoNoteApp {
         btnOutline.disabled = false;
         btnOutline.title = 'Toggle Heading Outline (Ctrl+Shift+O)';
       }
-
-      pane1Header?.classList.add('hidden');
-      if (pane1Header) pane1Header.style.display = 'none';
-      pane2?.classList.add('hidden');
-      resizer?.classList.add('hidden');
-      btn?.classList.remove('active');
-
-      const pane1 = document.getElementById('editor-pane-1');
-      if (pane1) {
-        pane1.style.width = '';
-        pane1.style.flex = '1';
-      }
-
-      // Release the second CodeMirror instance so it doesn't linger in memory.
-      if (this.editor2) {
-        this.editor2.destroy();
-        this.editor2 = null;
-      }
-      this.pane2Path = null;
+      this.splitView.disable();
     }
   }
 
   private formatDocument(): void {
     const active = this.tabManager.getActiveTab();
-    if (!active) return;
+    if (!active || active.kind === 'image') return;
 
     const currentContent = this.editor.getContent();
     const formatted = formatMarkdown(currentContent);
@@ -2093,46 +1166,6 @@ class PicoNoteApp {
     } else {
       this.showToast('Document Already Formatted');
     }
-  }
-
-  private setImageZoom(zoom: number): void {
-    this.imageZoom = Math.max(0.1, Math.min(5.0, Math.round(zoom * 100) / 100));
-    this.updateImageTransform();
-  }
-
-  private setImageRotation(degrees: number): void {
-    this.imageRotation = degrees % 360;
-    this.updateImageTransform();
-  }
-
-  private toggleImageBgMode(): void {
-    const card = document.getElementById('image-viewer-card');
-    if (!card) return;
-
-    card.classList.remove(`bg-${this.imageBgMode}`);
-    if (this.imageBgMode === 'dark') this.imageBgMode = 'light';
-    else if (this.imageBgMode === 'light') this.imageBgMode = 'checkerboard';
-    else this.imageBgMode = 'dark';
-
-    card.classList.add(`bg-${this.imageBgMode}`);
-    this.showToast(`Canvas BG: ${this.imageBgMode.toUpperCase()}`);
-  }
-
-  private resetImageViewer(): void {
-    this.imageZoom = 1.0;
-    this.imageRotation = 0;
-    this.imagePanX = 0;
-    this.imagePanY = 0;
-    this.updateImageTransform();
-  }
-
-  private updateImageTransform(): void {
-    const img = document.getElementById('image-viewer-img') as HTMLImageElement;
-    const label = document.getElementById('img-zoom-label');
-    if (!img) return;
-
-    img.style.transform = `translate(${this.imagePanX}px, ${this.imagePanY}px) scale(${this.imageZoom}) rotate(${this.imageRotation}deg)`;
-    if (label) label.textContent = `${Math.round(this.imageZoom * 100)}%`;
   }
 
   /** Styled, promise-based confirmation dialog (replaces blocking confirm()). */
@@ -2244,19 +1277,12 @@ class PicoNoteApp {
     }
   }
 
-  private releaseCurrentImageUrl(): void {
-    if (this.currentImageUrl) {
-      URL.revokeObjectURL(this.currentImageUrl);
-      this.currentImageUrl = null;
-    }
-  }
-
   /** Poll the active file's mtime and warn if it changed outside PicoNote. */
   private async checkActiveFileForExternalChange(): Promise<void> {
     if (this.externalCheckInFlight) return;
     const tab = this.tabManager.getActiveTab();
     if (!tab || !tab.path || tab.diskMtime === undefined) return;
-    if (tab.content.startsWith('[IMAGE_VIEWER:')) return;
+    if (tab.kind === 'image') return;
 
     // Don't re-prompt while the banner is already up for this file.
     const banner = document.getElementById('external-change-banner');

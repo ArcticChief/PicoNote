@@ -32,6 +32,8 @@ export interface Tab {
   id: string;
   path: string | null;
   name: string;
+  /** 'text' opens in the editor; 'image' renders in the image viewer (uses `path`). */
+  kind: 'text' | 'image';
   content: string;
   savedContent: string;
   isDirty: boolean;

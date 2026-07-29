@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { TocItem } from './types';
+import { escapeHtml } from './util';
 
 
 // Configure marked with GFM options
@@ -83,17 +84,4 @@ export function renderFrontmatterHtml(frontmatter: Record<string, string>): stri
     )
     .join('');
   return `<div class="frontmatter-card"><div class="frontmatter-title">META DATA (FRONTMATTER)</div><table class="frontmatter-table">${rows}</table></div>`;
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/[&<>"']/g, (m) => {
-    switch (m) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return m;
-    }
-  });
 }

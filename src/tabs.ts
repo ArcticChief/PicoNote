@@ -130,11 +130,17 @@ export class TabManager {
   }
 
 
-  public openTab(path: string | null, name: string, content: string): Tab {
-    return this.findOrOpenTab(path, name, content, true);
+  public openTab(path: string | null, name: string, content: string, kind: 'text' | 'image' = 'text'): Tab {
+    return this.findOrOpenTab(path, name, content, true, kind);
   }
 
-  public findOrOpenTab(path: string | null, name: string, content: string, activate: boolean = true): Tab {
+  public findOrOpenTab(
+    path: string | null,
+    name: string,
+    content: string,
+    activate: boolean = true,
+    kind: 'text' | 'image' = 'text'
+  ): Tab {
     if (path) {
       const existing = this.tabs.find((t) => t.path === path);
       if (existing) {
@@ -151,6 +157,7 @@ export class TabManager {
       id,
       path,
       name,
+      kind,
       content,
       savedContent: content,
       isDirty: false,
