@@ -4,7 +4,9 @@ import { CodeMirrorEditor } from './editor';
 import { FileExplorer, getDraggedExplorerItemPath } from './explorer';
 
 import { parseMarkdown, renderFrontmatterHtml } from './markdown';
+import { formatMarkdown } from './formatter';
 import { CommandPalette } from './palette';
+
 import { SpotlightSearch } from './spotlight';
 import { TabManager } from './tabs';
 import { ThemeManager } from './theme';
@@ -474,15 +476,14 @@ class PicoNoteApp {
           this.editor.applyFormatting(fmt);
         }
       });
-
     });
 
+    document.getElementById('btn-format-document')?.addEventListener('click', () => this.formatDocument());
 
     document.getElementById('btn-preview-toggle')?.addEventListener('click', () => this.togglePreview());
-
-
     document.getElementById('btn-outline-toggle')?.addEventListener('click', () => this.toggleOutline());
     document.getElementById('btn-theme-toggle')?.addEventListener('click', () => this.toggleTheme());
+
 
 
     document.getElementById('welcome-open-folder')?.addEventListener('click', () => this.setMainWorkspaceFolder());
@@ -534,6 +535,12 @@ class PicoNoteApp {
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
+      if (e.shiftKey && e.altKey && (e.key === 'F' || e.key === 'f')) {
+        e.preventDefault();
+        this.formatDocument();
+        return;
+      }
+
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'k' || e.key === 'K') {
           e.preventDefault();
@@ -574,12 +581,14 @@ class PicoNoteApp {
         }
       }
     });
+
   }
 
 
   private setupCommands(): void {
     this.palette.registerCommands([
       { id: 'spotlight-search', label: 'Workspace: Global Spotlight Search...', shortcut: 'Ctrl+K', action: () => this.spotlight.show() },
+      { id: 'format-document', label: 'Format: Auto-Beautify & Align Tables', shortcut: 'Shift+Alt+F', action: () => this.formatDocument() },
       { id: 'create-tab-group', label: 'Tabs: Create New Tab Group...', action: () => {
         const active = this.tabManager.getActiveTab();
         const grpName = prompt('Enter new Tab Group name:');
@@ -588,7 +597,8 @@ class PicoNoteApp {
           if (active) this.tabManager.assignTabToGroup(active.id, grp.id);
         }
       }},
-      { id: 'split-view', label: 'View: Toggle Split Editor Pane', shortcut: 'Ctrl+\\', action: () => this.toggleSplitView() },
+      { id: 'split-view', label: 'View: Toggle Split Editor Pane', shortcut: 'Ctrl+\\\\', action: () => this.toggleSplitView() },
+
 
 
       { id: 'set-main-folder', label: 'Workspace: Set Main Folder (Entry Point)...', shortcut: 'Ctrl+Shift+O', action: () => this.setMainWorkspaceFolder() },
@@ -602,6 +612,7 @@ class PicoNoteApp {
       { id: 'toggle-sidebar', label: 'View: Toggle Sidebar', shortcut: 'Ctrl+B', action: () => this.toggleSidebar() },
     ]);
   }
+
 
   public showLoading(message: string = 'Loading...'): void {
     const loadingBar = document.getElementById('app-loading-bar');
@@ -1851,11 +1862,35 @@ class PicoNoteApp {
     }
   }
 
+  private formatDocument(): void {
+    const active = this.tabManager.getActiveTab();
+    if (!active) return;
 
+    const currentContent = this.editor.getContent();
+    const formatted = formatMarkdown(currentContent);
 
+    if (currentContent !== formatted) {
+      this.editor.setContent(formatted, active.path || active.name);
+      this.handleDocChange(formatted);
+      this.showToast('Document Beautified & Tables Aligned ✨');
+    } else {
+      this.showToast('Document Already Formatted');
+    }
+  }
 
+  private showToast(message: string): void {
+    const toast = document.getElementById('global-loading-toast');
+    const toastText = document.getElementById('loading-toast-text');
+    if (!toast || !toastText) return;
 
+    toastText.textContent = message;
+    toast.classList.remove('hidden');
+    setTimeout(() => {
+      toast.classList.add('hidden');
+    }, 1800);
+  }
 }
+
 
 
 // Start application
