@@ -188,11 +188,36 @@
 
           <div id="editor-container" class="editor-pane-body"></div>
           <div id="image-viewer" class="hidden">
-            <div class="image-viewer-card">
-              <img id="image-viewer-img" src="" alt="Loaded Image" />
+            <!-- Minimalist Image Canvas Toolbar -->
+            <div id="image-viewer-toolbar" class="image-viewer-toolbar">
+              <button id="img-btn-zoom-out" class="img-tb-btn" title="Zoom Out (-)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </button>
+              <span id="img-zoom-label" class="img-zoom-label">100%</span>
+              <button id="img-btn-zoom-in" class="img-tb-btn" title="Zoom In (+)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </button>
+              <button id="img-btn-zoom-reset" class="img-tb-btn" title="Reset Zoom & Fit Screen">Fit</button>
+              <span class="img-tb-divider"></span>
+              <button id="img-btn-rotate" class="img-tb-btn" title="Rotate 90° Clockwise">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+              </button>
+              <button id="img-btn-bg-toggle" class="img-tb-btn" title="Toggle Canvas Background (Dark / Light / Checkerboard)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 0 0 20z" fill="currentColor"></path></svg>
+              </button>
+              <span class="img-tb-divider"></span>
+              <button id="img-btn-copy-md" class="img-tb-btn" title="Copy Markdown Image Tag">Markdown</button>
+            </div>
+
+            <!-- Image Canvas Card -->
+            <div id="image-viewer-card" class="image-viewer-card bg-dark">
+              <div id="image-viewer-viewport" class="image-viewer-viewport">
+                <img id="image-viewer-img" src="" alt="Loaded Image" draggable="false" />
+              </div>
               <div id="image-viewer-info" class="image-viewer-info"></div>
             </div>
           </div>
+
         </div>
 
         <!-- Draggable Split View Resizer -->

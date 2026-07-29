@@ -28,6 +28,15 @@ class PicoNoteApp {
   private autoSaveEnabled: boolean = true;
   private autoSaveTimer: any = null;
 
+  private imageZoom: number = 1.0;
+  private imageRotation: number = 0;
+  private imageBgMode: 'dark' | 'light' | 'checkerboard' = 'dark';
+  private imagePanX: number = 0;
+  private imagePanY: number = 0;
+  private isImagePanning: boolean = false;
+  private imagePanStart: { x: number; y: number } = { x: 0, y: 0 };
+
+
 
 
   private previewVisible: boolean = false;
@@ -479,12 +488,53 @@ class PicoNoteApp {
     });
 
     document.getElementById('btn-format-document')?.addEventListener('click', () => this.formatDocument());
-
     document.getElementById('btn-preview-toggle')?.addEventListener('click', () => this.togglePreview());
     document.getElementById('btn-outline-toggle')?.addEventListener('click', () => this.toggleOutline());
     document.getElementById('btn-theme-toggle')?.addEventListener('click', () => this.toggleTheme());
 
+    // Image Viewer Canvas Controls
+    document.getElementById('img-btn-zoom-in')?.addEventListener('click', () => this.setImageZoom(this.imageZoom + 0.25));
+    document.getElementById('img-btn-zoom-out')?.addEventListener('click', () => this.setImageZoom(this.imageZoom - 0.25));
+    document.getElementById('img-btn-zoom-reset')?.addEventListener('click', () => this.resetImageViewer());
+    document.getElementById('img-btn-rotate')?.addEventListener('click', () => this.setImageRotation(this.imageRotation + 90));
+    document.getElementById('img-btn-bg-toggle')?.addEventListener('click', () => this.toggleImageBgMode());
 
+    document.getElementById('img-btn-copy-md')?.addEventListener('click', () => {
+      const activeTab = this.tabManager.getActiveTab();
+      if (activeTab && activeTab.path) {
+        const relativePath = activeTab.path.replace(/\\/g, '/');
+        const tag = `![${activeTab.name}](${relativePath})`;
+        navigator.clipboard.writeText(tag);
+        this.showToast('Markdown Tag Copied 📋');
+      }
+    });
+
+    // Image Canvas Wheel Zoom & Mouse Pan
+    const imgViewport = document.getElementById('image-viewer-viewport');
+    imgViewport?.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      this.setImageZoom(this.imageZoom + delta);
+    });
+
+    imgViewport?.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        this.isImagePanning = true;
+        this.imagePanStart = { x: e.clientX - this.imagePanX, y: e.clientY - this.imagePanY };
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (this.isImagePanning) {
+        this.imagePanX = e.clientX - this.imagePanStart.x;
+        this.imagePanY = e.clientY - this.imagePanStart.y;
+        this.updateImageTransform();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      this.isImagePanning = false;
+    });
 
     document.getElementById('welcome-open-folder')?.addEventListener('click', () => this.setMainWorkspaceFolder());
     document.getElementById('welcome-open-file')?.addEventListener('click', () => this.openFileDialog());
@@ -1878,6 +1928,46 @@ class PicoNoteApp {
     }
   }
 
+  private setImageZoom(zoom: number): void {
+    this.imageZoom = Math.max(0.1, Math.min(5.0, Math.round(zoom * 100) / 100));
+    this.updateImageTransform();
+  }
+
+  private setImageRotation(degrees: number): void {
+    this.imageRotation = degrees % 360;
+    this.updateImageTransform();
+  }
+
+  private toggleImageBgMode(): void {
+    const card = document.getElementById('image-viewer-card');
+    if (!card) return;
+
+    card.classList.remove(`bg-${this.imageBgMode}`);
+    if (this.imageBgMode === 'dark') this.imageBgMode = 'light';
+    else if (this.imageBgMode === 'light') this.imageBgMode = 'checkerboard';
+    else this.imageBgMode = 'dark';
+
+    card.classList.add(`bg-${this.imageBgMode}`);
+    this.showToast(`Canvas BG: ${this.imageBgMode.toUpperCase()}`);
+  }
+
+  private resetImageViewer(): void {
+    this.imageZoom = 1.0;
+    this.imageRotation = 0;
+    this.imagePanX = 0;
+    this.imagePanY = 0;
+    this.updateImageTransform();
+  }
+
+  private updateImageTransform(): void {
+    const img = document.getElementById('image-viewer-img') as HTMLImageElement;
+    const label = document.getElementById('img-zoom-label');
+    if (!img) return;
+
+    img.style.transform = `translate(${this.imagePanX}px, ${this.imagePanY}px) scale(${this.imageZoom}) rotate(${this.imageRotation}deg)`;
+    if (label) label.textContent = `${Math.round(this.imageZoom * 100)}%`;
+  }
+
   private showToast(message: string): void {
     const toast = document.getElementById('global-loading-toast');
     const toastText = document.getElementById('loading-toast-text');
@@ -1890,6 +1980,7 @@ class PicoNoteApp {
     }, 1800);
   }
 }
+
 
 
 

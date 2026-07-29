@@ -1248,7 +1248,7 @@ body, html {
 }
 
 
-/* Native Image Viewer Component */
+/* Native Image Viewer Canvas Component */
 #image-viewer {
   flex: 1;
   width: 100%;
@@ -1257,46 +1257,133 @@ body, html {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   background-color: var(--bg-primary);
-  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 16px 16px;
-  overflow: auto;
-  padding: 30px;
+  position: relative;
+  overflow: hidden;
 }
-
 
 #image-viewer.hidden {
   display: none;
 }
 
+.image-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  margin-top: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  z-index: 10;
+  box-shadow: var(--shadow-sm);
+}
+
+.img-tb-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.img-tb-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.img-zoom-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  min-width: 38px;
+  text-align: center;
+}
+
+.img-tb-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border-color);
+}
+
 .image-viewer-card {
+  flex: 1;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  max-width: 90%;
-  max-height: 90%;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.image-viewer-card.bg-dark {
+  background-color: var(--bg-primary);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.image-viewer-card.bg-light {
+  background-color: #f8fafc;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.image-viewer-card.bg-checkerboard {
+  background-color: #1e293b;
+  background-image: linear-gradient(45deg, #0f172a 25%, transparent 25%),
+                    linear-gradient(-45deg, #0f172a 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #0f172a 75%),
+                    linear-gradient(-45deg, transparent 75%, #0f172a 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+
+.image-viewer-viewport {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.image-viewer-viewport:active {
+  cursor: grabbing;
 }
 
 #image-viewer-img {
-  max-width: 100%;
-  max-height: calc(100vh - 160px);
+  max-width: 90%;
+  max-height: 80vh;
   object-fit: contain;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  transition: transform 0.1s ease-out;
+  transform-origin: center center;
 }
 
 .image-viewer-info {
-  font-size: 12px;
+  margin-bottom: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-muted);
-  background: var(--bg-secondary);
-  padding: 6px 14px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  padding: 4px 14px;
   border-radius: 20px;
   border: 1px solid var(--border-color);
+  z-index: 5;
 }
 
 
