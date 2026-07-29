@@ -603,12 +603,47 @@ class PicoNoteApp {
     ]);
   }
 
+  public showLoading(message: string = 'Loading...'): void {
+    const loadingBar = document.getElementById('app-loading-bar');
+    const toast = document.getElementById('global-loading-toast');
+    const toastText = document.getElementById('loading-toast-text');
+    const statusLoader = document.getElementById('status-loader');
+    const statusText = document.getElementById('status-loader-text');
+
+    if (loadingBar) loadingBar.classList.remove('hidden');
+    if (toast) toast.classList.remove('hidden');
+    if (toastText) toastText.textContent = message;
+    if (statusLoader) statusLoader.classList.remove('hidden');
+    if (statusText) statusText.textContent = message;
+  }
+
+  public hideLoading(): void {
+    const loadingBar = document.getElementById('app-loading-bar');
+    const toast = document.getElementById('global-loading-toast');
+    const statusLoader = document.getElementById('status-loader');
+
+    if (loadingBar) loadingBar.classList.add('hidden');
+    if (toast) toast.classList.add('hidden');
+    if (statusLoader) statusLoader.classList.add('hidden');
+  }
+
+  public async withLoading<T>(action: () => Promise<T>, message: string = 'Loading...'): Promise<T> {
+    this.showLoading(message);
+    try {
+      return await action();
+    } finally {
+      this.hideLoading();
+    }
+  }
+
   private async setMainWorkspaceFolder(): Promise<void> {
     const selected = await api.showOpenFolderDialog();
     if (selected) {
-      localStorage.setItem('piconote-main-folder', selected);
-      await this.explorer.openFolder(selected);
-      this.setupModal.classList.add('hidden');
+      await this.withLoading(async () => {
+        localStorage.setItem('piconote-main-folder', selected);
+        await this.explorer.openFolder(selected);
+        this.setupModal.classList.add('hidden');
+      }, 'Opening workspace...');
     }
   }
 
@@ -618,18 +653,20 @@ class PicoNoteApp {
   }
 
   private async openFileByPath(filePath: string): Promise<void> {
-    try {
-      const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
-      if (this.isImageFile(filename)) {
-        this.tabManager.openTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`);
-        return;
-      }
+    await this.withLoading(async () => {
+      try {
+        const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
+        if (this.isImageFile(filename)) {
+          this.tabManager.openTab(filePath, filename, `[IMAGE_VIEWER:${filePath}]`);
+          return;
+        }
 
-      const content = await api.readFile(filePath);
-      this.tabManager.openTab(filePath, filename, content);
-    } catch (err: any) {
-      alert(`Could not open file: ${err}`);
-    }
+        const content = await api.readFile(filePath);
+        this.tabManager.openTab(filePath, filename, content);
+      } catch (err: any) {
+        alert(`Could not open file: ${err}`);
+      }
+    }, 'Opening document...');
   }
 
   private async openFileDialog(): Promise<void> {
@@ -652,8 +689,10 @@ class PicoNoteApp {
     if (!active) return;
 
     if (active.path) {
-      await api.writeFile(active.path, active.content);
-      this.tabManager.markActiveSaved();
+      await this.withLoading(async () => {
+        await api.writeFile(active.path!, active.content);
+        this.tabManager.markActiveSaved();
+      }, 'Saving document...');
     } else {
       await this.saveFileAs();
     }
@@ -665,14 +704,17 @@ class PicoNoteApp {
 
     const selectedPath = await api.showSaveFileDialog(active.name);
     if (selectedPath) {
-      await api.writeFile(selectedPath, active.content);
-      const newName = selectedPath.replace(/\\/g, '/').split('/').pop() || active.name;
-      this.tabManager.markActiveSaved(selectedPath, newName);
-      if (this.explorer.getCurrentFolder()) {
-        await this.explorer.refresh();
-      }
+      await this.withLoading(async () => {
+        await api.writeFile(selectedPath, active.content);
+        const newName = selectedPath.replace(/\\/g, '/').split('/').pop() || active.name;
+        this.tabManager.markActiveSaved(selectedPath, newName);
+        if (this.explorer.getCurrentFolder()) {
+          await this.explorer.refresh();
+        }
+      }, 'Saving document as...');
     }
   }
+
 
   private togglePreview(): void {
     if (this.isSplitView) return;
@@ -735,6 +777,7 @@ class PicoNoteApp {
       this.statusFilename.textContent = 'No file open';
       this.statusLang.textContent = 'Plain Text';
       if (titlebarDoc) titlebarDoc.textContent = 'PicoNote Studio';
+      this.explorer.setActiveFilePath(null);
       return;
     }
 
@@ -742,6 +785,8 @@ class PicoNoteApp {
     this.statusFilename.textContent = activeTab.name + (activeTab.isDirty ? ' ●' : '');
     this.statusLang.textContent = activeTab.language;
     if (titlebarDoc) titlebarDoc.textContent = `${activeTab.name}${activeTab.isDirty ? ' ●' : ''} — PicoNote`;
+    this.explorer.setActiveFilePath(activeTab.path || null);
+
 
     if (activeTab.content.startsWith('[IMAGE_VIEWER:')) {
       const filePath = activeTab.content.slice(14, -1);

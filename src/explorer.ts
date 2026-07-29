@@ -19,6 +19,31 @@ export class FileExplorer {
   private favorites: Set<string> = new Set(JSON.parse(localStorage.getItem('piconote-favorites') || '[]'));
   private onFileSelect?: (filePath: string) => void;
   private onOpenFileInSplit?: (filePath: string) => void;
+  private activeFilePath: string | null = null;
+
+  public setActiveFilePath(filePath: string | null): void {
+    this.activeFilePath = filePath;
+    this.updateActiveHighlight();
+  }
+
+  public updateActiveHighlight(): void {
+    if (!this.container) return;
+
+    const prevActive = this.container.querySelectorAll('.tree-row.active-file');
+    prevActive.forEach((el) => el.classList.remove('active-file'));
+
+    if (!this.activeFilePath) return;
+
+    try {
+      const targetRow = this.container.querySelector(`.tree-row[data-path="${CSS.escape(this.activeFilePath)}"]`);
+      if (targetRow) {
+        targetRow.classList.add('active-file');
+      }
+    } catch {
+      // Ignore querySelector syntax errors if any
+    }
+  }
+
 
   constructor(
     containerId: string,
@@ -128,7 +153,11 @@ export class FileExplorer {
 
         const row = document.createElement('div');
         row.className = 'tree-row';
+        if (this.activeFilePath && item.path === this.activeFilePath) {
+          row.classList.add('active-file');
+        }
         row.setAttribute('data-path', item.path);
+
 
         const icon = document.createElement('span');
         icon.className = 'tree-icon';

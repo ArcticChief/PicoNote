@@ -44,7 +44,13 @@
       </div>
     </div>
 
+    <!-- Top-Edge Micro Loading Progress Bar -->
+    <div id="app-loading-bar" class="loading-bar hidden">
+      <div class="loading-bar-inner"></div>
+    </div>
+
     <div id="app-body">
+
       <!-- Sidebar Explorer -->
       <div id="sidebar">
 
@@ -276,6 +282,10 @@
             <span class="status-pill-dot active" id="autosave-dot"></span>
             <span id="autosave-label">AUTOSAVE: ON</span>
           </button>
+          <span id="status-loader" class="status-loader hidden" title="Loading...">
+            <span class="status-loader-spinner"></span>
+            <span id="status-loader-text" class="status-loader-text">Loading...</span>
+          </span>
         </div>
         <div class="status-right">
           <span id="status-word-count">0 words · 0 chars · ~0 min read</span>
@@ -288,6 +298,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Global Floating Loading Toast -->
+    <div id="global-loading-toast" class="loading-toast hidden">
+      <span class="loading-toast-spinner"></span>
+      <span id="loading-toast-text" class="loading-toast-text">Loading...</span>
+    </div>
+
 
     <!-- Onboarding Modal: First Time Setup for Main Workspace Entry Point -->
     <div id="setup-modal" class="hidden">
