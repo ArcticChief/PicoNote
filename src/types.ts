@@ -41,6 +41,8 @@ export interface Tab {
   groupId?: string | null;
   scrollPosition?: number;
   cursorOffset?: number;
+  /** Last known on-disk modified time (ms). Session-only; used to detect external edits. */
+  diskMtime?: number;
 }
 
 

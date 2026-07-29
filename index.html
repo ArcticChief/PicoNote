@@ -186,6 +186,15 @@
             <div class="split-header-spacer"></div>
           </div>
 
+          <!-- External File Change Banner -->
+          <div id="external-change-banner" class="external-change-banner hidden">
+            <span id="external-change-label" class="external-change-label">⚠ File modified on disk</span>
+            <div class="external-change-actions">
+              <button id="external-reload-btn" class="external-change-btn reload" title="Discard local changes and load the version on disk">Reload</button>
+              <button id="external-keeplocal-btn" class="external-change-btn keep" title="Keep the version currently open in PicoNote">Keep Local</button>
+            </div>
+          </div>
+
           <div id="editor-container" class="editor-pane-body"></div>
           <div id="image-viewer" class="hidden">
             <!-- Minimalist Image Canvas Toolbar -->
@@ -213,6 +222,10 @@
             <div id="image-viewer-card" class="image-viewer-card bg-dark">
               <div id="image-viewer-viewport" class="image-viewer-viewport">
                 <img id="image-viewer-img" src="" alt="Loaded Image" draggable="false" />
+              </div>
+              <div id="image-viewer-fallback" class="image-viewer-fallback hidden">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                <span id="image-viewer-fallback-text">Image unavailable</span>
               </div>
               <div id="image-viewer-info" class="image-viewer-info"></div>
             </div>

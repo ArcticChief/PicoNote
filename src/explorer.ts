@@ -19,7 +19,13 @@ export class FileExplorer {
   private favorites: Set<string> = new Set(JSON.parse(localStorage.getItem('piconote-favorites') || '[]'));
   private onFileSelect?: (filePath: string) => void;
   private onOpenFileInSplit?: (filePath: string) => void;
+  private onToast?: (message: string, variant?: 'info' | 'error' | 'success') => void;
   private activeFilePath: string | null = null;
+
+  private toast(message: string, variant: 'info' | 'error' | 'success' = 'info'): void {
+    if (this.onToast) this.onToast(message, variant);
+    else console.warn('[explorer]', message);
+  }
 
   public setActiveFilePath(filePath: string | null): void {
     this.activeFilePath = filePath;
@@ -50,13 +56,15 @@ export class FileExplorer {
     pathInputId: string,
     searchInputId: string,
     onFileSelect?: (filePath: string) => void,
-    onOpenFileInSplit?: (filePath: string) => void
+    onOpenFileInSplit?: (filePath: string) => void,
+    onToast?: (message: string, variant?: 'info' | 'error' | 'success') => void
   ) {
     this.container = document.getElementById(containerId) as HTMLElement;
     this.pathInput = document.getElementById(pathInputId) as HTMLInputElement;
     this.searchInput = document.getElementById(searchInputId) as HTMLInputElement;
     this.onFileSelect = onFileSelect;
     this.onOpenFileInSplit = onOpenFileInSplit;
+    this.onToast = onToast;
 
 
     this.pathInput?.addEventListener('keydown', (e) => {
@@ -107,7 +115,7 @@ export class FileExplorer {
   public async openFolder(folderPath: string): Promise<void> {
     const exists = await api.pathExists(folderPath);
     if (!exists) {
-      alert(`Folder does not exist: ${folderPath}`);
+      this.toast(`Folder does not exist: ${folderPath}`, 'error');
       return;
     }
 
@@ -281,7 +289,7 @@ export class FileExplorer {
                 await api.renameItem(srcPath, destPath);
                 await this.refresh();
               } catch (err: any) {
-                alert(`Could not move item: ${err}`);
+                this.toast(`Could not move item: ${err}`, 'error');
               }
             }
           }

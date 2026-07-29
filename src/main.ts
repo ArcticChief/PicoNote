@@ -28,6 +28,12 @@ class PicoNoteApp {
   private autoSaveEnabled: boolean = true;
   private autoSaveTimer: any = null;
 
+  private snapshotInterval: any = null;
+  private fileWatchInterval: any = null;
+  private externalCheckInFlight: boolean = false;
+  private toastTimer: any = null;
+  private currentImageUrl: string | null = null;
+
   private imageZoom: number = 1.0;
   private imageRotation: number = 0;
   private imageBgMode: 'dark' | 'light' | 'checkerboard' = 'dark';
@@ -95,7 +101,8 @@ class PicoNoteApp {
       'folder-path-input',
       'explorer-search-input',
       (filePath) => this.openFileByPath(filePath),
-      (filePath) => this.openFileInSplitPane(filePath)
+      (filePath) => this.openFileInSplitPane(filePath),
+      (message, variant) => this.showToast(message, variant)
     );
 
 
@@ -137,6 +144,33 @@ class PicoNoteApp {
         this.newFile();
       }
     }
+
+    this.setupReliabilityGuards();
+  }
+
+  /**
+   * Wires the zero-data-loss safety net: periodic session snapshots (survives
+   * force-close), focus/interval external-change polling, and a global error
+   * boundary that surfaces uncaught failures as toasts instead of dying silently.
+   */
+  private setupReliabilityGuards(): void {
+    // Periodic draft snapshot so an abrupt force-close still leaves a <5s draft.
+    this.snapshotInterval = setInterval(() => this.saveSessionState(), 5000);
+
+    // External file mutation watcher (focus-based polling).
+    window.addEventListener('focus', () => this.checkActiveFileForExternalChange());
+    this.fileWatchInterval = setInterval(() => this.checkActiveFileForExternalChange(), 3000);
+
+    // Global error boundary — never fail silently.
+    window.addEventListener('error', (e) => {
+      console.error('Uncaught error:', e.error || e.message);
+      this.showToast(`Something went wrong — ${e.message || 'unknown error'}`, 'error');
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('Unhandled rejection:', e.reason);
+      const msg = e.reason?.message || String(e.reason || 'unknown error');
+      this.showToast(`Something went wrong — ${msg}`, 'error');
+    });
   }
 
 
@@ -175,10 +209,18 @@ class PicoNoteApp {
       }
     });
 
-    // Auto-save workspace session state on exit
+    // Auto-save workspace session state on exit + release timers/resources
     window.addEventListener('beforeunload', () => {
       this.saveSessionState();
+      if (this.snapshotInterval) clearInterval(this.snapshotInterval);
+      if (this.fileWatchInterval) clearInterval(this.fileWatchInterval);
+      if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
+      if (this.currentImageUrl) URL.revokeObjectURL(this.currentImageUrl);
     });
+
+    // External file change banner actions
+    document.getElementById('external-reload-btn')?.addEventListener('click', () => this.reloadActiveFromDisk());
+    document.getElementById('external-keeplocal-btn')?.addEventListener('click', () => this.keepLocalVersion());
 
 
 
@@ -189,12 +231,9 @@ class PicoNoteApp {
       await this.setMainWorkspaceFolder();
     });
 
-    // Editor listeners
-    this.editor.setOnChange((content) => {
-      this.tabManager.updateActiveContent(content);
-      this.updateMarkdownPreview(content);
-      this.updateOutline(content);
-    });
+    // Editor listeners — route through handleDocChange so word count, live
+    // preview/outline, and autosave all fire on every edit.
+    this.editor.setOnChange((content) => this.handleDocChange(content));
 
     this.editor.setOnCursorChange((line, col) => {
       this.statusCursor.textContent = `Ln ${line}, Col ${col}`;
@@ -226,7 +265,7 @@ class PicoNoteApp {
       }
 
       if (!noteDir) {
-        alert('Please open or select a workspace folder first to save pasted images.');
+        this.showToast('Open a workspace folder first to save pasted images.', 'error');
         return;
       }
 
@@ -249,7 +288,7 @@ class PicoNoteApp {
           if (cur) this.updateMarkdownPreview(cur.content);
         }
       } catch (err: any) {
-        alert(`Failed to save pasted image: ${err}`);
+        this.showToast(`Failed to save pasted image: ${err}`, 'error');
       }
     });
 
@@ -450,7 +489,7 @@ class PicoNoteApp {
     document.getElementById('btn-new-folder')?.addEventListener('click', async () => {
       const folder = this.explorer.getCurrentFolder();
       if (!folder) {
-        alert('Please open a workspace folder first.');
+        this.showToast('Open a workspace folder first.', 'error');
         return;
       }
       const folderName = prompt('Enter new folder name:');
@@ -723,9 +762,10 @@ class PicoNoteApp {
         }
 
         const content = await api.readFile(filePath);
-        this.tabManager.openTab(filePath, filename, content);
+        const tab = this.tabManager.openTab(filePath, filename, content);
+        await this.refreshTabDiskMtime(tab);
       } catch (err: any) {
-        alert(`Could not open file: ${err}`);
+        this.showToast(`Could not open file: ${err}`, 'error');
       }
     }, 'Opening document...');
   }
@@ -750,9 +790,15 @@ class PicoNoteApp {
     if (!active) return;
 
     if (active.path) {
+      if (await this.isDiskNewer(active)) {
+        this.showExternalChangeBanner(active);
+        this.showToast('File changed on disk — resolve before saving', 'error');
+        return;
+      }
       await this.withLoading(async () => {
         await api.writeFile(active.path!, active.content);
         this.tabManager.markActiveSaved();
+        await this.refreshTabDiskMtime(active);
       }, 'Saving document...');
     } else {
       await this.saveFileAs();
@@ -769,6 +815,7 @@ class PicoNoteApp {
         await api.writeFile(selectedPath, active.content);
         const newName = selectedPath.replace(/\\/g, '/').split('/').pop() || active.name;
         this.tabManager.markActiveSaved(selectedPath, newName);
+        await this.refreshTabDiskMtime(active);
         if (this.explorer.getCurrentFolder()) {
           await this.explorer.refresh();
         }
@@ -854,20 +901,41 @@ class PicoNoteApp {
       this.editorContainer.style.display = 'none';
       if (imageViewer) imageViewer.classList.remove('hidden');
 
+      const fallback = document.getElementById('image-viewer-fallback');
+      const fallbackText = document.getElementById('image-viewer-fallback-text');
+
+      // Release the previous blob URL before creating a new one.
+      this.releaseCurrentImageUrl();
+
       api.getImageDataUrl(filePath).then((dataUrl) => {
+        this.currentImageUrl = dataUrl;
         if (imageImg) {
+          fallback?.classList.add('hidden');
+          imageImg.style.display = '';
           imageImg.src = dataUrl;
           imageImg.onload = () => {
             if (imageInfo) {
               imageInfo.textContent = `${activeTab.name} — ${imageImg.naturalWidth} × ${imageImg.naturalHeight} px`;
             }
           };
+          imageImg.onerror = () => {
+            this.releaseCurrentImageUrl();
+            imageImg.style.display = 'none';
+            if (fallbackText) fallbackText.textContent = `Image unavailable — ${activeTab.name}`;
+            fallback?.classList.remove('hidden');
+          };
         }
       }).catch((err) => {
-        if (imageInfo) imageInfo.textContent = `Error loading image: ${err}`;
+        if (imageImg) imageImg.style.display = 'none';
+        if (fallbackText) fallbackText.textContent = `Image unavailable — ${err}`;
+        fallback?.classList.remove('hidden');
+        if (imageInfo) imageInfo.textContent = '';
       });
       return;
     }
+
+    // Leaving the image viewer for a text document — free any blob URL.
+    this.releaseCurrentImageUrl();
 
     const fmtBar = document.getElementById('formatting-toolbar');
     const ext = activeTab ? (activeTab.name.includes('.') ? activeTab.name.slice(activeTab.name.lastIndexOf('.')).toLowerCase() : '') : '';
@@ -882,6 +950,12 @@ class PicoNoteApp {
 
     this.editorContainer.style.display = 'block';
     if (imageViewer) imageViewer.classList.add('hidden');
+
+    // Backfill the disk-mtime baseline for tabs opened via paths we don't
+    // explicitly instrument (e.g. restored sessions) so the watcher/guard apply.
+    if (activeTab.path && activeTab.diskMtime === undefined) {
+      void this.refreshTabDiskMtime(activeTab);
+    }
 
     this.editor.setContent(activeTab.content, activeTab.path || activeTab.name);
     if (this.previewVisible) this.updateMarkdownPreview(activeTab.content);
@@ -1516,14 +1590,29 @@ class PicoNoteApp {
 
       // Re-read file contents asynchronously for disk files to ensure freshness, preserving unsaved changes
       for (const tab of state.tabs) {
-        if (tab.path && !tab.isDirty) {
-          try {
+        if (!tab.path) continue;
+        try {
+          if (!tab.isDirty) {
+            // Clean tab: trust disk and re-baseline mtime.
             const freshContent = await api.readFile(tab.path);
             tab.content = freshContent;
             tab.savedContent = freshContent;
-          } catch {
-            // Keep cached content if file removed
+            const info = await api.getFileInfo(tab.path);
+            tab.diskMtime = info.modified;
+          } else {
+            // Dirty draft: keep the cached edit, but detect if disk drifted while
+            // the app was closed. diskMtime = 0 forces the watcher to flag it so
+            // the user resolves the conflict instead of us silently overwriting.
+            const diskContent = await api.readFile(tab.path);
+            if (diskContent !== tab.savedContent) {
+              tab.diskMtime = 0;
+            } else {
+              const info = await api.getFileInfo(tab.path);
+              tab.diskMtime = info.modified;
+            }
           }
+        } catch {
+          // File removed/unreadable — keep cached content, leave mtime unset.
         }
       }
 
@@ -1536,6 +1625,8 @@ class PicoNoteApp {
       const activeTab = this.tabManager.getActiveTab();
       if (activeTab) {
         this.onActiveTabChanged(activeTab);
+        // Surface a conflict banner immediately if the active draft drifted on disk.
+        void this.checkActiveFileForExternalChange();
       }
 
       if (state.isSplitView) {
@@ -1648,8 +1739,15 @@ class PicoNoteApp {
         this.autoSaveTimer = setTimeout(async () => {
           const cur = this.tabManager.getActiveTab();
           if (cur && cur.path && cur.isDirty) {
+            // Never silently clobber an external edit — surface a banner instead.
+            if (await this.isDiskNewer(cur)) {
+              if (dot) dot.style.background = '#ef4444';
+              this.showExternalChangeBanner(cur);
+              return;
+            }
             await api.writeFile(cur.path, cur.content);
             this.tabManager.markActiveSaved(cur.path, cur.name);
+            await this.refreshTabDiskMtime(cur);
             if (dot) dot.style.background = '#10b981';
           }
         }, 1000);
@@ -1668,6 +1766,7 @@ class PicoNoteApp {
         try {
           const content = await api.readFile(filePath);
           tab = this.tabManager.findOrOpenTab(filePath, filename, content, false);
+          await this.refreshTabDiskMtime(tab);
         } catch (err) {
           console.error('Failed to read file for split pane:', err);
           return;
@@ -1821,7 +1920,7 @@ class PicoNoteApp {
       this.editor2.setContent(content, target.path || target.name);
       this.checkSplitPaneReadOnly();
       this.populateSplitFileSelect();
-      this.editor2.setOnChange((newContent) => {
+      this.editor2.setOnChange(async (newContent) => {
 
         const tab = target.id
           ? this.tabManager.getTabs().find((t) => t.id === target.id)
@@ -1840,7 +1939,13 @@ class PicoNoteApp {
         }
 
         if (this.autoSaveEnabled && target.path) {
-          api.writeFile(target.path, newContent);
+          const tab2 = this.tabManager.getTabs().find((t) => t.path === target.path);
+          if (tab2 && (await this.isDiskNewer(tab2))) {
+            this.showExternalChangeBanner(tab2);
+          } else {
+            await api.writeFile(target.path, newContent);
+            if (tab2) await this.refreshTabDiskMtime(tab2);
+          }
         }
       });
     }
@@ -1909,6 +2014,13 @@ class PicoNoteApp {
         pane1.style.width = '';
         pane1.style.flex = '1';
       }
+
+      // Release the second CodeMirror instance so it doesn't linger in memory.
+      if (this.editor2) {
+        this.editor2.destroy();
+        this.editor2 = null;
+      }
+      this.pane2Path = null;
     }
   }
 
@@ -1968,16 +2080,125 @@ class PicoNoteApp {
     if (label) label.textContent = `${Math.round(this.imageZoom * 100)}%`;
   }
 
-  private showToast(message: string): void {
+  private showToast(message: string, variant: 'info' | 'error' | 'success' = 'info'): void {
     const toast = document.getElementById('global-loading-toast');
     const toastText = document.getElementById('loading-toast-text');
     if (!toast || !toastText) return;
 
     toastText.textContent = message;
-    toast.classList.remove('hidden');
-    setTimeout(() => {
+    toast.classList.remove('hidden', 'toast-info', 'toast-error', 'toast-success');
+    toast.classList.add(`toast-${variant}`);
+    // The built-in spinner only makes sense for neutral/loading toasts.
+    toast.classList.toggle('no-spinner', variant !== 'info');
+
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
       toast.classList.add('hidden');
-    }, 1800);
+    }, variant === 'error' ? 3400 : 1800);
+  }
+
+  // ---- Zero-data-loss safety net helpers ----
+
+  /** Refresh a tab's on-disk modified-time baseline (best effort). */
+  private async refreshTabDiskMtime(tab: Tab | null): Promise<void> {
+    if (!tab || !tab.path) return;
+    try {
+      const info = await api.getFileInfo(tab.path);
+      tab.diskMtime = info.modified;
+    } catch {
+      // File may have been removed; leave the baseline as-is.
+    }
+  }
+
+  /** True when the file on disk is newer than the baseline we last read/wrote. */
+  private async isDiskNewer(tab: Tab): Promise<boolean> {
+    if (!tab.path || tab.diskMtime === undefined) return false;
+    try {
+      const info = await api.getFileInfo(tab.path);
+      return info.modified > tab.diskMtime;
+    } catch {
+      return false;
+    }
+  }
+
+  private releaseCurrentImageUrl(): void {
+    if (this.currentImageUrl) {
+      URL.revokeObjectURL(this.currentImageUrl);
+      this.currentImageUrl = null;
+    }
+  }
+
+  /** Poll the active file's mtime and warn if it changed outside PicoNote. */
+  private async checkActiveFileForExternalChange(): Promise<void> {
+    if (this.externalCheckInFlight) return;
+    const tab = this.tabManager.getActiveTab();
+    if (!tab || !tab.path || tab.diskMtime === undefined) return;
+    if (tab.content.startsWith('[IMAGE_VIEWER:')) return;
+
+    // Don't re-prompt while the banner is already up for this file.
+    const banner = document.getElementById('external-change-banner');
+    if (banner && !banner.classList.contains('hidden') && banner.dataset.path === tab.path) return;
+
+    this.externalCheckInFlight = true;
+    try {
+      const info = await api.getFileInfo(tab.path);
+      if (info.modified > tab.diskMtime) {
+        this.showExternalChangeBanner(tab);
+      }
+    } catch {
+      // File deleted/unreadable — ignore, saving will surface a real error.
+    } finally {
+      this.externalCheckInFlight = false;
+    }
+  }
+
+  private showExternalChangeBanner(tab: Tab): void {
+    const banner = document.getElementById('external-change-banner');
+    const label = document.getElementById('external-change-label');
+    if (!banner) return;
+    banner.dataset.path = tab.path || '';
+    if (label) label.textContent = `⚠ "${tab.name}" was modified on disk`;
+    banner.classList.remove('hidden');
+  }
+
+  private hideExternalChangeBanner(): void {
+    const banner = document.getElementById('external-change-banner');
+    if (banner) {
+      banner.classList.add('hidden');
+      delete banner.dataset.path;
+    }
+  }
+
+  /** Discard the in-app copy and load the current on-disk version. */
+  private async reloadActiveFromDisk(): Promise<void> {
+    const tab = this.tabManager.getActiveTab();
+    if (!tab || !tab.path) {
+      this.hideExternalChangeBanner();
+      return;
+    }
+    try {
+      const content = await api.readFile(tab.path);
+      const info = await api.getFileInfo(tab.path);
+      tab.content = content;
+      tab.savedContent = content;
+      tab.isDirty = false;
+      tab.diskMtime = info.modified;
+      this.editor.setContent(content, tab.path);
+      this.tabManager.refresh();
+      this.showToast('Reloaded from disk', 'success');
+    } catch (err) {
+      this.showToast(`Failed to reload: ${err}`, 'error');
+    }
+    this.hideExternalChangeBanner();
+  }
+
+  /** Keep the in-app copy; re-baseline mtime so we stop warning and let it win on next save. */
+  private async keepLocalVersion(): Promise<void> {
+    const tab = this.tabManager.getActiveTab();
+    if (tab && tab.path) {
+      await this.refreshTabDiskMtime(tab);
+    }
+    this.hideExternalChangeBanner();
   }
 }
 

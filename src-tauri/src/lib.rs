@@ -44,7 +44,35 @@ fn read_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
-    fs::write(&path, content).map_err(|e| e.to_string())
+    let target = Path::new(&path);
+
+    // Build a sibling temp path (.<filename>.tmp) in the same directory so the
+    // final rename stays on the same volume and is therefore atomic. The leading
+    // dot also keeps the temp file out of the explorer (list_dir skips dotfiles).
+    let file_name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "untitled".to_string());
+    let tmp_path = match target.parent() {
+        Some(dir) => dir.join(format!(".{}.tmp", file_name)),
+        None => Path::new(&format!(".{}.tmp", file_name)).to_path_buf(),
+    };
+
+    // Write the full content to the temp file first. If anything fails here the
+    // original file on disk is left untouched.
+    if let Err(e) = fs::write(&tmp_path, &content) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.to_string());
+    }
+
+    // Atomically replace the target. On Windows fs::rename maps to MoveFileExW
+    // with MOVEFILE_REPLACE_EXISTING, so this replaces an existing file in place.
+    if let Err(e) = fs::rename(&tmp_path, target) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.to_string());
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

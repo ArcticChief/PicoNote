@@ -260,6 +260,11 @@ export class TabManager {
     this.notify();
   }
 
+  /** Force a re-render/notify without mutating tab data (used after external reload). */
+  public refresh(): void {
+    this.notify();
+  }
+
   private notify(): void {
     if (this.onTabsUpdated) this.onTabsUpdated(this.tabs, this.groups);
     if (this.onTabChange) this.onTabChange(this.getActiveTab());
