@@ -18,6 +18,7 @@ export class CodeMirrorEditor {
   private languageCompartment = new Compartment();
   private themeCompartment = new Compartment();
   private readOnlyCompartment = new Compartment();
+  private langToken = 0;
   private onChangeCallback?: (content: string) => void;
   private onCursorCallback?: (line: number, col: number) => void;
   private onOpenLinkCallback?: (target: string, type: 'url' | 'file') => void;
@@ -217,6 +218,8 @@ export class CodeMirrorEditor {
 
   public async setLanguageForFile(filePath: string): Promise<void> {
     const ext = filePath.includes('.') ? filePath.slice(filePath.lastIndexOf('.')).toLowerCase() : '';
+    // Guard against out-of-order async loads when the user switches files quickly.
+    const token = ++this.langToken;
 
     if (ext === '.md' || ext === '.markdown' || !ext) {
       this.view.dispatch({
@@ -228,6 +231,7 @@ export class CodeMirrorEditor {
     const langDesc = LanguageDescription.matchFilename(languages, filePath);
     if (langDesc) {
       const support = await langDesc.load();
+      if (token !== this.langToken) return; // a newer file was opened meanwhile
       this.view.dispatch({
         effects: this.languageCompartment.reconfigure(support),
       });

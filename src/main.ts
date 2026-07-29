@@ -13,6 +13,18 @@ import { ThemeManager } from './theme';
 import { Tab, TabGroup } from './types';
 
 
+function escapeHtml(str: string): string {
+  return str.replace(/[&<>"']/g, (m) => {
+    switch (m) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return m;
+    }
+  });
+}
 
 
 class PicoNoteApp {
@@ -33,6 +45,8 @@ class PicoNoteApp {
   private externalCheckInFlight: boolean = false;
   private toastTimer: any = null;
   private currentImageUrl: string | null = null;
+  private previewImageUrls: string[] = [];
+  private livePanesTimer: any = null;
 
   private imageZoom: number = 1.0;
   private imageRotation: number = 0;
@@ -82,7 +96,7 @@ class PicoNoteApp {
 
     this.editor = new CodeMirrorEditor(this.editorContainer);
     this.editor.setTheme(this.themeManager.getTheme() === 'dark');
-    this.editor.setOnChange((content) => this.handleDocChange(content));
+    // Note: the editor's onChange is registered once in setupEventListeners().
 
 
     this.tabManager = new TabManager(
@@ -102,7 +116,9 @@ class PicoNoteApp {
       'explorer-search-input',
       (filePath) => this.openFileByPath(filePath),
       (filePath) => this.openFileInSplitPane(filePath),
-      (message, variant) => this.showToast(message, variant)
+      (message, variant) => this.showToast(message, variant),
+      (oldPath, newPath) => this.tabManager.handleExternalRename(oldPath, newPath),
+      (path) => this.tabManager.handleExternalDelete(path)
     );
 
 
@@ -215,7 +231,9 @@ class PicoNoteApp {
       if (this.snapshotInterval) clearInterval(this.snapshotInterval);
       if (this.fileWatchInterval) clearInterval(this.fileWatchInterval);
       if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
+      if (this.livePanesTimer) clearTimeout(this.livePanesTimer);
       if (this.currentImageUrl) URL.revokeObjectURL(this.currentImageUrl);
+      this.releasePreviewImageUrls();
     });
 
     // External file change banner actions
@@ -657,7 +675,7 @@ class PicoNoteApp {
         } else if (e.key === 'w' || e.key === 'W') {
           e.preventDefault();
           const active = this.tabManager.getActiveTab();
-          if (active) this.tabManager.closeTab(active.id);
+          if (active) this.requestCloseTab(active.id);
         } else if (e.key === 'b' || e.key === 'B') {
           e.preventDefault();
           this.toggleSidebar();
@@ -761,9 +779,14 @@ class PicoNoteApp {
           return;
         }
 
-        const content = await api.readFile(filePath);
-        const tab = this.tabManager.openTab(filePath, filename, content);
+        const result = await api.readFileChecked(filePath);
+        const tab = this.tabManager.openTab(filePath, filename, result.content);
+        tab.readOnlyLossy = result.lossy;
         await this.refreshTabDiskMtime(tab);
+        if (result.lossy) {
+          this.showToast('Opened read-only: file is not valid UTF-8 text', 'error');
+          this.onActiveTabChanged(this.tabManager.getActiveTab());
+        }
       } catch (err: any) {
         this.showToast(`Could not open file: ${err}`, 'error');
       }
@@ -788,6 +811,11 @@ class PicoNoteApp {
   private async saveFile(): Promise<void> {
     const active = this.tabManager.getActiveTab();
     if (!active) return;
+
+    if (active.readOnlyLossy) {
+      this.showToast('This file is read-only (not valid UTF-8 text)', 'error');
+      return;
+    }
 
     if (active.path) {
       if (await this.isDiskNewer(active)) {
@@ -839,6 +867,7 @@ class PicoNoteApp {
       this.mdPreviewContainer.classList.add('hidden');
       resizer?.classList.add('hidden');
       btn?.classList.remove('active');
+      this.releasePreviewImageUrls();
     }
   }
 
@@ -958,6 +987,8 @@ class PicoNoteApp {
     }
 
     this.editor.setContent(activeTab.content, activeTab.path || activeTab.name);
+    // Non-UTF8 files are view-only so a save can't corrupt the original bytes.
+    this.editor.setReadOnly(!!activeTab.readOnlyLossy);
     if (this.previewVisible) this.updateMarkdownPreview(activeTab.content);
     if (this.outlineVisible) this.updateOutline(activeTab.content);
     if (this.isSplitView) {
@@ -1080,7 +1111,7 @@ class PicoNoteApp {
     const icon = this.getTabFileIcon(tab.name);
     el.innerHTML = `
       <span class="tab-icon">${icon}</span>
-      <span class="tab-title">${tab.name}</span>
+      <span class="tab-title">${escapeHtml(tab.name)}</span>
       ${tab.pinned ? '<span class="tab-pin-icon" title="Pinned">📌</span>' : ''}
       ${tab.isDirty ? '<span class="tab-dot" title="Unsaved changes"></span>' : ''}
       ${!tab.pinned ? `<span class="tab-close" data-id="${tab.id}">&times;</span>` : ''}
@@ -1125,7 +1156,7 @@ class PicoNoteApp {
       const target = e.target as HTMLElement;
       if (target.classList.contains('tab-close')) {
         e.stopPropagation();
-        this.tabManager.closeTab(tab.id);
+        this.requestCloseTab(tab.id);
       } else {
         this.tabManager.setActiveTab(tab.id);
       }
@@ -1170,7 +1201,7 @@ class PicoNoteApp {
       item.innerHTML = `
         <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
           <span>${icon}</span>
-          <span style="font-weight:600; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${tab.name}</span>
+          <span style="font-weight:600; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${escapeHtml(tab.name)}</span>
           ${tab.pinned ? '📌' : ''}
           ${tab.isDirty ? '●' : ''}
         </div>
@@ -1181,8 +1212,7 @@ class PicoNoteApp {
         const target = e.target as HTMLElement;
         if (target.classList.contains('tab-close')) {
           e.stopPropagation();
-          this.tabManager.closeTab(tab.id);
-          this.renderAllTabsDropdown(query);
+          this.requestCloseTab(tab.id).then(() => this.renderAllTabsDropdown(query));
         } else {
           this.tabManager.setActiveTab(tab.id);
           document.getElementById('all-tabs-dropdown')?.classList.add('hidden');
@@ -1293,13 +1323,17 @@ class PicoNoteApp {
       this.tabManager.setColorTag(tab.id, undefined);
     });
     menu.querySelector('#tab-ctx-close-others')?.addEventListener('click', () => {
-      this.tabManager.closeOtherTabs(tab.id);
+      const willClose = this.tabManager.getTabs().filter((t) => t.id !== tab.id && !t.pinned);
+      this.requestBulkClose(willClose, () => this.tabManager.closeOtherTabs(tab.id));
     });
     menu.querySelector('#tab-ctx-close-right')?.addEventListener('click', () => {
-      this.tabManager.closeTabsToRight(tab.id);
+      const tabs = this.tabManager.getTabs();
+      const idx = tabs.findIndex((t) => t.id === tab.id);
+      const willClose = idx === -1 ? [] : tabs.filter((t, i) => i > idx && !t.pinned);
+      this.requestBulkClose(willClose, () => this.tabManager.closeTabsToRight(tab.id));
     });
     menu.querySelector('#tab-ctx-close')?.addEventListener('click', () => {
-      this.tabManager.closeTab(tab.id);
+      this.requestCloseTab(tab.id);
     });
   }
 
@@ -1559,7 +1593,8 @@ class PicoNoteApp {
     });
 
     menu.querySelector('#tabsbar-ctx-close-all')?.addEventListener('click', () => {
-      this.tabManager.closeAllTabs();
+      const willClose = this.tabManager.getTabs().filter((t) => !t.pinned);
+      this.requestBulkClose(willClose, () => this.tabManager.closeAllTabs());
     });
   }
 
@@ -1588,33 +1623,36 @@ class PicoNoteApp {
       const state = JSON.parse(raw);
       if (!state || !state.tabs || !Array.isArray(state.tabs) || state.tabs.length === 0) return false;
 
-      // Re-read file contents asynchronously for disk files to ensure freshness, preserving unsaved changes
-      for (const tab of state.tabs) {
-        if (!tab.path) continue;
-        try {
-          if (!tab.isDirty) {
-            // Clean tab: trust disk and re-baseline mtime.
-            const freshContent = await api.readFile(tab.path);
-            tab.content = freshContent;
-            tab.savedContent = freshContent;
-            const info = await api.getFileInfo(tab.path);
-            tab.diskMtime = info.modified;
-          } else {
-            // Dirty draft: keep the cached edit, but detect if disk drifted while
-            // the app was closed. diskMtime = 0 forces the watcher to flag it so
-            // the user resolves the conflict instead of us silently overwriting.
-            const diskContent = await api.readFile(tab.path);
-            if (diskContent !== tab.savedContent) {
-              tab.diskMtime = 0;
-            } else {
+      // Re-read file contents for disk files (in parallel) to ensure freshness,
+      // preserving unsaved changes.
+      await Promise.all(
+        (state.tabs as Tab[]).map(async (tab) => {
+          if (!tab.path) return;
+          try {
+            if (!tab.isDirty) {
+              // Clean tab: trust disk and re-baseline mtime.
+              const freshContent = await api.readFile(tab.path);
+              tab.content = freshContent;
+              tab.savedContent = freshContent;
               const info = await api.getFileInfo(tab.path);
               tab.diskMtime = info.modified;
+            } else {
+              // Dirty draft: keep the cached edit, but detect if disk drifted while
+              // the app was closed. diskMtime = 0 forces the watcher to flag it so
+              // the user resolves the conflict instead of us silently overwriting.
+              const diskContent = await api.readFile(tab.path);
+              if (diskContent !== tab.savedContent) {
+                tab.diskMtime = 0;
+              } else {
+                const info = await api.getFileInfo(tab.path);
+                tab.diskMtime = info.modified;
+              }
             }
+          } catch {
+            // File removed/unreadable — keep cached content, leave mtime unset.
           }
-        } catch {
-          // File removed/unreadable — keep cached content, leave mtime unset.
-        }
-      }
+        })
+      );
 
       this.tabManager.restoreSessionState({
         tabs: state.tabs,
@@ -1668,6 +1706,9 @@ class PicoNoteApp {
 
     const previewContent = document.getElementById('md-preview-content');
     if (previewContent) {
+      // Revoke the blob URLs from the previous render before replacing the DOM,
+      // otherwise every re-render leaks one Object URL per embedded local image.
+      this.releasePreviewImageUrls();
       previewContent.innerHTML = html;
 
       const imgs = previewContent.querySelectorAll('img[data-local-path]');
@@ -1678,6 +1719,7 @@ class PicoNoteApp {
           try {
             const fullPath = decodeURIComponent(rawPath);
             const dataUrl = await api.getImageDataUrl(fullPath);
+            this.previewImageUrls.push(dataUrl);
             el.src = dataUrl;
           } catch (e) {
             console.error('Failed to load preview image:', e);
@@ -1685,6 +1727,23 @@ class PicoNoteApp {
         }
       });
     }
+  }
+
+  private releasePreviewImageUrls(): void {
+    for (const url of this.previewImageUrls) {
+      URL.revokeObjectURL(url);
+    }
+    this.previewImageUrls = [];
+  }
+
+  /** Debounced live preview + outline refresh (used on every keystroke). */
+  private scheduleLivePanes(content: string): void {
+    if (!this.previewVisible && !this.outlineVisible) return;
+    if (this.livePanesTimer) clearTimeout(this.livePanesTimer);
+    this.livePanesTimer = setTimeout(() => {
+      if (this.previewVisible) this.updateMarkdownPreview(content);
+      if (this.outlineVisible) this.updateOutline(content);
+    }, 180);
   }
 
 
@@ -1723,15 +1782,14 @@ class PicoNoteApp {
     const activeTab = this.tabManager.getActiveTab();
     if (activeTab) {
       this.tabManager.updateActiveContent(content);
-      if (this.previewVisible) this.updateMarkdownPreview(content);
-      if (this.outlineVisible) this.updateOutline(content);
+      this.scheduleLivePanes(content);
 
       if (this.isSplitView && this.editor2) {
         this.checkSplitPaneReadOnly();
       }
 
 
-      if (this.autoSaveEnabled && activeTab.path) {
+      if (this.autoSaveEnabled && activeTab.path && !activeTab.readOnlyLossy) {
         if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
         const dot = document.getElementById('autosave-dot');
         if (dot) dot.style.background = '#fbbf24';
@@ -1815,7 +1873,7 @@ class PicoNoteApp {
       const opt2 = document.createElement('option');
       opt2.value = t.id;
       opt2.textContent = `📄 ${t.name}${t.isDirty ? ' ●' : ''}`;
-      if (this.pane2Path && (t.id === this.pane2Path || t.path === this.pane2Path || t.name === this.pane2Path)) {
+      if (this.pane2Path && t.id === this.pane2Path) {
         opt2.selected = true;
       }
       select2.appendChild(opt2);
@@ -1823,7 +1881,7 @@ class PicoNoteApp {
 
     if (activeTab) select1.value = activeTab.id;
     if (this.pane2Path) {
-      const targetTab = tabs.find((t) => t.id === this.pane2Path || t.path === this.pane2Path || t.name === this.pane2Path);
+      const targetTab = tabs.find((t) => t.id === this.pane2Path);
       if (targetTab) select2.value = targetTab.id;
     }
   }
@@ -1832,11 +1890,7 @@ class PicoNoteApp {
     if (!this.isSplitView || !this.editor2) return;
 
     const activeTab = this.tabManager.getActiveTab();
-    const isSame = !!(
-      activeTab &&
-      this.pane2Path &&
-      (activeTab.id === this.pane2Path || (activeTab.path && activeTab.path === this.pane2Path) || activeTab.name === this.pane2Path)
-    );
+    const isSame = !!(activeTab && this.pane2Path && activeTab.id === this.pane2Path);
 
     this.editor2.setReadOnly(isSame);
 
@@ -1898,12 +1952,13 @@ class PicoNoteApp {
       this.editor2.setTheme(this.themeManager.getTheme() === 'dark');
     }
 
-    this.pane2Path = target.id || target.path || target.name;
-
     let content = '';
     const existingTab = target.id
       ? this.tabManager.getTabs().find((t) => t.id === target.id)
       : this.tabManager.getTabs().find((t) => t.path === target.path);
+
+    // Track pane 2 strictly by tab id to avoid mismatching files with equal names.
+    this.pane2Path = existingTab ? existingTab.id : (target.id || null);
 
     if (existingTab) {
       content = existingTab.content;
@@ -2080,16 +2135,84 @@ class PicoNoteApp {
     if (label) label.textContent = `${Math.round(this.imageZoom * 100)}%`;
   }
 
+  /** Styled, promise-based confirmation dialog (replaces blocking confirm()). */
+  private confirmDialog(
+    message: string,
+    opts: { title?: string; confirmText?: string; cancelText?: string; danger?: boolean } = {}
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      overlay.innerHTML = `
+        <div class="confirm-dialog" role="dialog" aria-modal="true">
+          <div class="confirm-title"></div>
+          <div class="confirm-message"></div>
+          <div class="confirm-actions">
+            <button class="confirm-btn cancel"></button>
+            <button class="confirm-btn ok ${opts.danger ? 'danger' : ''}"></button>
+          </div>
+        </div>`;
+      (overlay.querySelector('.confirm-title') as HTMLElement).textContent = opts.title || 'Confirm';
+      (overlay.querySelector('.confirm-message') as HTMLElement).textContent = message;
+      const cancelBtn = overlay.querySelector('.confirm-btn.cancel') as HTMLButtonElement;
+      const okBtn = overlay.querySelector('.confirm-btn.ok') as HTMLButtonElement;
+      cancelBtn.textContent = opts.cancelText || 'Cancel';
+      okBtn.textContent = opts.confirmText || 'OK';
+
+      document.body.appendChild(overlay);
+      okBtn.focus();
+
+      const cleanup = (result: boolean) => {
+        overlay.remove();
+        document.removeEventListener('keydown', onKey, true);
+        resolve(result);
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); cleanup(true); }
+      };
+      document.addEventListener('keydown', onKey, true);
+      overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) cleanup(false); });
+      cancelBtn.addEventListener('click', () => cleanup(false));
+      okBtn.addEventListener('click', () => cleanup(true));
+    });
+  }
+
+  /** Close a single tab, confirming first if it has unsaved changes. */
+  private async requestCloseTab(tabId: string): Promise<void> {
+    const tab = this.tabManager.getTabs().find((t) => t.id === tabId);
+    if (tab && tab.isDirty) {
+      const ok = await this.confirmDialog(
+        `"${tab.name}" has unsaved changes. Close without saving?`,
+        { title: 'Unsaved Changes', confirmText: 'Close Without Saving', danger: true }
+      );
+      if (!ok) return;
+    }
+    this.tabManager.closeTab(tabId);
+  }
+
+  /** Confirm once if any of the given tabs are dirty, then run the bulk close. */
+  private async requestBulkClose(willClose: Tab[], run: () => void): Promise<void> {
+    const dirtyCount = willClose.filter((t) => t.isDirty).length;
+    if (dirtyCount > 0) {
+      const ok = await this.confirmDialog(
+        `${dirtyCount} tab${dirtyCount > 1 ? 's have' : ' has'} unsaved changes. Close without saving?`,
+        { title: 'Unsaved Changes', confirmText: 'Close Without Saving', danger: true }
+      );
+      if (!ok) return;
+    }
+    run();
+  }
+
   private showToast(message: string, variant: 'info' | 'error' | 'success' = 'info'): void {
-    const toast = document.getElementById('global-loading-toast');
-    const toastText = document.getElementById('loading-toast-text');
+    // Dedicated element so notifications never clash with the loading indicator.
+    const toast = document.getElementById('app-toast');
+    const toastText = document.getElementById('app-toast-text');
     if (!toast || !toastText) return;
 
     toastText.textContent = message;
     toast.classList.remove('hidden', 'toast-info', 'toast-error', 'toast-success');
     toast.classList.add(`toast-${variant}`);
-    // The built-in spinner only makes sense for neutral/loading toasts.
-    toast.classList.toggle('no-spinner', variant !== 'info');
 
     if (this.toastTimer) clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => {

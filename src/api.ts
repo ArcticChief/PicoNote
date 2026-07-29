@@ -35,6 +35,10 @@ export const api = {
     return await invoke<string>('read_file', { path });
   },
 
+  readFileChecked: async (path: string): Promise<{ content: string; lossy: boolean }> => {
+    return await invoke<{ content: string; lossy: boolean }>('read_file_checked', { path });
+  },
+
   writeFile: async (path: string, content: string): Promise<void> => {
     return await invoke<void>('write_file', { path, content });
   },

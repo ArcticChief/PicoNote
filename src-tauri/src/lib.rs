@@ -13,6 +13,12 @@ pub struct FileItem {
 }
 
 #[derive(Serialize)]
+pub struct FileReadResult {
+    pub content: String,
+    pub lossy: bool,
+}
+
+#[derive(Serialize)]
 pub struct FileInfo {
     pub size: u64,
     pub is_directory: bool,
@@ -41,6 +47,20 @@ fn read_file(path: String) -> Result<String, String> {
     }
 }
 
+
+/// Reads a file, reporting whether the bytes were valid UTF-8. Callers use the
+/// `lossy` flag to open non-text files read-only so a later save can't corrupt them.
+#[tauri::command]
+fn read_file_checked(path: String) -> Result<FileReadResult, String> {
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(FileReadResult { content: text, lossy: false }),
+        Err(err) => Ok(FileReadResult {
+            content: String::from_utf8_lossy(err.as_bytes()).to_string(),
+            lossy: true,
+        }),
+    }
+}
 
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
@@ -324,6 +344,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             read_file,
+            read_file_checked,
             write_file,
             read_binary_file,
             save_binary_file,

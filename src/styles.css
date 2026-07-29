@@ -1883,22 +1883,116 @@ body, html {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Toast variants */
-.loading-toast.no-spinner .loading-toast-spinner {
-  display: none;
+/* Notification toast (separate from the loading indicator) */
+.app-toast {
+  position: fixed;
+  bottom: 74px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  max-width: 380px;
+  background: rgba(13, 15, 23, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(129, 140, 248, 0.3);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  color: var(--text-primary);
+  z-index: 9100;
+  animation: toast-fade-in 0.2s ease-out;
 }
-.loading-toast.toast-error {
+
+.app-toast.toast-error {
   border-color: rgba(239, 68, 68, 0.55);
   box-shadow: 0 10px 25px rgba(239, 68, 68, 0.25);
 }
-.loading-toast.toast-error .loading-toast-text {
+.app-toast.toast-error .app-toast-text {
   color: #fca5a5;
 }
-.loading-toast.toast-success {
+.app-toast.toast-success {
   border-color: rgba(16, 185, 129, 0.5);
 }
-.loading-toast.toast-success .loading-toast-text {
+.app-toast.toast-success .app-toast-text {
   color: #6ee7b7;
+}
+
+/* Confirmation dialog */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: toast-fade-in 0.15s ease-out;
+}
+
+.confirm-dialog {
+  width: 380px;
+  max-width: 90vw;
+  padding: 20px;
+  background: var(--bg-secondary, #12141d);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.confirm-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.confirm-message {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirm-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--border-color);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.confirm-btn:hover {
+  border-color: var(--accent-primary);
+}
+
+.confirm-btn.ok {
+  background: var(--accent-primary, #6366f1);
+  border-color: var(--accent-primary, #6366f1);
+  color: #fff;
+}
+
+.confirm-btn.ok.danger {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.confirm-btn.ok.danger:hover {
+  background: #ef4444;
+  border-color: #ef4444;
 }
 
 /* External File Change Banner */

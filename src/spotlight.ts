@@ -123,7 +123,7 @@ export class SpotlightSearch {
       el.className = `spotlight-item ${idx === this.selectedIndex ? 'selected' : ''}`;
       el.innerHTML = `
         <div class="spotlight-item-header">
-          <span>${item.file_name} ${item.line_number > 1 ? `(Ln ${item.line_number})` : ''}</span>
+          <span>${escapeHtml(item.file_name)} ${item.line_number > 1 ? `(Ln ${item.line_number})` : ''}</span>
           <span class="spotlight-badge">${item.match_type}</span>
         </div>
         <div class="spotlight-item-line">${escapeHtml(item.line_content)}</div>

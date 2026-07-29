@@ -43,6 +43,8 @@ export interface Tab {
   cursorOffset?: number;
   /** Last known on-disk modified time (ms). Session-only; used to detect external edits. */
   diskMtime?: number;
+  /** True when the file wasn't valid UTF-8; opened read-only to avoid save corruption. */
+  readOnlyLossy?: boolean;
 }
 
 

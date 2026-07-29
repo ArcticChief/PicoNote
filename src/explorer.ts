@@ -20,6 +20,8 @@ export class FileExplorer {
   private onFileSelect?: (filePath: string) => void;
   private onOpenFileInSplit?: (filePath: string) => void;
   private onToast?: (message: string, variant?: 'info' | 'error' | 'success') => void;
+  private onFileRenamed?: (oldPath: string, newPath: string) => void;
+  private onFileDeleted?: (path: string) => void;
   private activeFilePath: string | null = null;
 
   private toast(message: string, variant: 'info' | 'error' | 'success' = 'info'): void {
@@ -57,7 +59,9 @@ export class FileExplorer {
     searchInputId: string,
     onFileSelect?: (filePath: string) => void,
     onOpenFileInSplit?: (filePath: string) => void,
-    onToast?: (message: string, variant?: 'info' | 'error' | 'success') => void
+    onToast?: (message: string, variant?: 'info' | 'error' | 'success') => void,
+    onFileRenamed?: (oldPath: string, newPath: string) => void,
+    onFileDeleted?: (path: string) => void
   ) {
     this.container = document.getElementById(containerId) as HTMLElement;
     this.pathInput = document.getElementById(pathInputId) as HTMLInputElement;
@@ -65,6 +69,8 @@ export class FileExplorer {
     this.onFileSelect = onFileSelect;
     this.onOpenFileInSplit = onOpenFileInSplit;
     this.onToast = onToast;
+    this.onFileRenamed = onFileRenamed;
+    this.onFileDeleted = onFileDeleted;
 
 
     this.pathInput?.addEventListener('keydown', (e) => {
@@ -287,6 +293,7 @@ export class FileExplorer {
             if (srcPath !== destPath) {
               try {
                 await api.renameItem(srcPath, destPath);
+                if (this.onFileRenamed) this.onFileRenamed(srcPath, destPath);
                 await this.refresh();
               } catch (err: any) {
                 this.toast(`Could not move item: ${err}`, 'error');
@@ -456,20 +463,30 @@ export class FileExplorer {
       if (newName && newName !== item.name) {
         const parent = item.path.slice(0, item.path.lastIndexOf('\\'));
         const newPath = `${parent}\\${newName}`;
-        await api.renameItem(item.path, newPath);
-        await this.refresh();
+        try {
+          await api.renameItem(item.path, newPath);
+          if (this.onFileRenamed) this.onFileRenamed(item.path, newPath);
+          await this.refresh();
+        } catch (err: any) {
+          this.toast(`Could not rename: ${err}`, 'error');
+        }
       }
     });
 
     menu.querySelector('#ctx-delete')?.addEventListener('click', async () => {
       closeMenu();
       if (confirm(`Move "${item.name}" to Trash (.trash/)?`)) {
-        if (this.currentFolder) {
-          await api.trashItem(item.path, this.currentFolder);
-        } else {
-          await api.deleteItem(item.path);
+        try {
+          if (this.currentFolder) {
+            await api.trashItem(item.path, this.currentFolder);
+          } else {
+            await api.deleteItem(item.path);
+          }
+          if (this.onFileDeleted) this.onFileDeleted(item.path);
+          await this.refresh();
+        } catch (err: any) {
+          this.toast(`Could not delete: ${err}`, 'error');
         }
-        await this.refresh();
       }
     });
   }

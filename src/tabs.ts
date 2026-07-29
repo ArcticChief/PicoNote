@@ -265,6 +265,41 @@ export class TabManager {
     this.notify();
   }
 
+  /** Keep open tabs consistent when a file/folder is renamed or moved on disk. */
+  public handleExternalRename(oldPath: string, newPath: string): void {
+    let changed = false;
+    for (const t of this.tabs) {
+      if (!t.path) continue;
+      if (t.path === oldPath) {
+        t.path = newPath;
+        t.name = newPath.replace(/\\/g, '/').split('/').pop() || t.name;
+        t.language = this.detectLanguage(t.name);
+        t.diskMtime = undefined;
+        changed = true;
+      } else if (t.path.startsWith(oldPath + '\\') || t.path.startsWith(oldPath + '/')) {
+        // Descendant of a renamed/moved folder.
+        t.path = newPath + t.path.slice(oldPath.length);
+        t.diskMtime = undefined;
+        changed = true;
+      }
+    }
+    if (changed) this.notify();
+  }
+
+  /** Close tabs whose file (or containing folder) was deleted/trashed on disk. */
+  public handleExternalDelete(path: string): void {
+    const before = this.tabs.length;
+    this.tabs = this.tabs.filter((t) => {
+      if (!t.path) return true;
+      return !(t.path === path || t.path.startsWith(path + '\\') || t.path.startsWith(path + '/'));
+    });
+    if (this.tabs.length === before) return;
+    if (!this.tabs.some((t) => t.id === this.activeTabId)) {
+      this.activeTabId = this.tabs.length > 0 ? this.tabs[0].id : null;
+    }
+    this.notify();
+  }
+
   private notify(): void {
     if (this.onTabsUpdated) this.onTabsUpdated(this.tabs, this.groups);
     if (this.onTabChange) this.onTabChange(this.getActiveTab());

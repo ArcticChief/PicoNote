@@ -64,9 +64,13 @@ Compiled executables will be located in `src-tauri/target/release/bundle/nsis/` 
 | `Ctrl+Shift+O` | Set Workspace Directory |
 | `Ctrl+S` | Save File |
 | `Ctrl+Shift+S` | Save File As |
+| `Ctrl+W` | Close Active Tab |
+| `Ctrl+B` | Toggle Sidebar |
 | `Ctrl+Shift+M` | Toggle Live Preview |
-| `Ctrl+P` | Spotlight Search |
-| `Ctrl+Shift+P` | Command Palette |
+| `Ctrl+K` | Spotlight Search |
+| `Ctrl+P` | Command Palette |
+| `Ctrl+\` | Toggle Split Editor |
+| `Shift+Alt+F` | Format / Beautify Document |
 | `Ctrl+Shift+T` | Toggle Dark / Light Theme |
 | `Ctrl+V` | Paste Image from Clipboard |
 
