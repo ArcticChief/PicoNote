@@ -1714,6 +1714,94 @@ body, html {
   display: none;
 }
 
+/* Tab-group create modal */
+.grp-modal-card {
+  max-width: 360px;
+  width: 90%;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.grp-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.grp-modal-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grp-modal-field {
+  margin-bottom: 16px;
+}
+
+.grp-modal-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.grp-modal-field .search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.grp-color-picker {
+  display: flex;
+  gap: 10px;
+}
+
+.color-opt-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.color-opt-btn.selected {
+  border-color: #fff;
+}
+
+.color-opt-btn[data-color="purple"] { background: #818cf8; }
+.color-opt-btn[data-color="blue"] { background: #38bdf8; }
+.color-opt-btn[data-color="emerald"] { background: #34d399; }
+.color-opt-btn[data-color="amber"] { background: #fbbf24; }
+.color-opt-btn[data-color="rose"] { background: #f43f5e; }
+
+.grp-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.grp-modal-actions .tb-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.grp-modal-actions .tb-btn.primary {
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+}
+
 
 .modal-card, .spotlight-card, .palette-modal {
   width: 90%;

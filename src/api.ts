@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { FileItem, FileInfo, SearchResult } from './types';
+import { getExtension } from './util';
 
 export const api = {
   showWindow: async (): Promise<void> => {
@@ -54,7 +55,7 @@ export const api = {
 
   getImageDataUrl: async (path: string): Promise<string> => {
     const bytes = await api.readBinaryFile(path);
-    const ext = path.includes('.') ? path.slice(path.lastIndexOf('.')).toLowerCase() : '';
+    const ext = getExtension(path);
     const mimeMap: Record<string, string> = {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',

@@ -7,6 +7,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { LanguageDescription } from '@codemirror/language';
+import { getExtension } from './util';
 
 export interface DetectedLink {
   target: string;
@@ -18,6 +19,7 @@ export class CodeMirrorEditor {
   private languageCompartment = new Compartment();
   private themeCompartment = new Compartment();
   private readOnlyCompartment = new Compartment();
+  private fontSizeCompartment = new Compartment();
   private langToken = 0;
   private onChangeCallback?: (content: string) => void;
   private onCursorCallback?: (line: number, col: number) => void;
@@ -42,6 +44,7 @@ export class CodeMirrorEditor {
         this.themeCompartment.of(oneDark),
         this.languageCompartment.of(markdown({ codeLanguages: languages })),
         this.readOnlyCompartment.of(EditorState.readOnly.of(false)),
+        this.fontSizeCompartment.of(EditorView.theme({ '&': { fontSize: '14px' } })),
 
         keymap.of([
           ...defaultKeymap,
@@ -102,7 +105,7 @@ export class CodeMirrorEditor {
           },
         }),
         EditorView.theme({
-          '&': { height: '100%', fontSize: '14px', fontFamily: "'Consolas', 'Cascadia Code', 'Fira Code', monospace" },
+          '&': { height: '100%', fontFamily: "'Consolas', 'Cascadia Code', 'Fira Code', monospace" },
 
           '.cm-scroller': {
             overflow: 'auto',
@@ -217,7 +220,7 @@ export class CodeMirrorEditor {
   }
 
   public async setLanguageForFile(filePath: string): Promise<void> {
-    const ext = filePath.includes('.') ? filePath.slice(filePath.lastIndexOf('.')).toLowerCase() : '';
+    const ext = getExtension(filePath);
     // Guard against out-of-order async loads when the user switches files quickly.
     const token = ++this.langToken;
 
@@ -245,6 +248,13 @@ export class CodeMirrorEditor {
   public setTheme(isDark: boolean): void {
     this.view.dispatch({
       effects: this.themeCompartment.reconfigure(isDark ? oneDark : []),
+    });
+  }
+
+  /** Set the editor font size in px (drives zoom). */
+  public setFontSize(px: number): void {
+    this.view.dispatch({
+      effects: this.fontSizeCompartment.reconfigure(EditorView.theme({ '&': { fontSize: `${px}px` } })),
     });
   }
 

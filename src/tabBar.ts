@@ -1,6 +1,9 @@
 import { TabManager } from './tabs';
 import { Tab, TabGroup } from './types';
 import { escapeHtml } from './util';
+import { getFileIconSvg } from './icons';
+import { positionContextMenu } from './menu';
+import { promptDialog } from './dialogs';
 
 interface TabBarDeps {
   tabManager: TabManager;
@@ -101,7 +104,7 @@ export class TabBarView {
     if (tab.colorTag) el.setAttribute('data-color-tag', tab.colorTag);
 
     el.innerHTML = `
-      <span class="tab-icon">${this.getTabFileIcon(tab.name)}</span>
+      <span class="tab-icon">${getFileIconSvg(tab.name, 13)}</span>
       <span class="tab-title">${escapeHtml(tab.name)}</span>
       ${tab.pinned ? '<span class="tab-pin-icon" title="Pinned">📌</span>' : ''}
       ${tab.isDirty ? '<span class="tab-dot" title="Unsaved changes"></span>' : ''}
@@ -158,19 +161,6 @@ export class TabBarView {
     (targetContainer || this.tabsContainer).appendChild(el);
   }
 
-  private getTabFileIcon(filename: string): string {
-    const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')).toLowerCase() : '';
-    const mdSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
-    const codeSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
-    const configSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
-    const fileSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
-
-    if (ext === '.md' || ext === '.markdown') return mdSvg;
-    if (['.js', '.ts', '.jsx', '.tsx', '.py', '.rs', '.go', '.c', '.cpp', '.h', '.sh', '.html', '.css'].includes(ext)) return codeSvg;
-    if (['.json', '.yaml', '.yml', '.toml', '.xml'].includes(ext)) return configSvg;
-    return fileSvg;
-  }
-
   // ---- All-tabs dropdown ----
 
   private renderAllTabsDropdown(query: string = ''): void {
@@ -193,7 +183,7 @@ export class TabBarView {
       item.className = `tabs-dropdown-item ${active && active.id === tab.id ? 'active' : ''}`;
       item.innerHTML = `
         <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
-          <span>${this.getTabFileIcon(tab.name)}</span>
+          <span>${getFileIconSvg(tab.name, 13)}</span>
           <span style="font-weight:600; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${escapeHtml(tab.name)}</span>
           ${tab.pinned ? '📌' : ''}
           ${tab.isDirty ? '●' : ''}
@@ -282,15 +272,7 @@ export class TabBarView {
   // ---- Context menus ----
 
   private positionMenu(menu: HTMLElement, x: number, y: number): void {
-    document.body.appendChild(menu);
-    const rect = menu.getBoundingClientRect();
-    const margin = 10;
-    let posX = x;
-    let posY = y;
-    if (posX + rect.width > window.innerWidth - margin) posX = window.innerWidth - rect.width - margin;
-    if (posY + rect.height > window.innerHeight - margin) posY = window.innerHeight - rect.height - margin;
-    menu.style.left = `${Math.max(margin, posX)}px`;
-    menu.style.top = `${Math.max(margin, posY)}px`;
+    positionContextMenu(menu, x, y);
     setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
   }
 
@@ -434,34 +416,34 @@ export class TabBarView {
     overlay.id = 'new-group-modal';
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal-content glass-panel" style="max-width: 360px; padding: 20px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-          <h3 style="margin:0; font-size:14px; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
+      <div class="grp-modal-card">
+        <div class="grp-modal-header">
+          <h3 class="grp-modal-title">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
             Create Tab Group
           </h3>
           <button id="close-grp-modal" class="preview-close-btn">&times;</button>
         </div>
 
-        <div style="margin-bottom: 14px;">
-          <label style="display:block; font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:6px;">GROUP NAME</label>
-          <input type="text" id="grp-name-input" class="search-input" placeholder="e.g. Project Docs, Ideas..." style="width:100%; box-sizing:border-box;" autofocus />
+        <div class="grp-modal-field">
+          <label class="grp-modal-label">GROUP NAME</label>
+          <input type="text" id="grp-name-input" class="search-input" placeholder="e.g. Project Docs, Ideas..." autofocus />
         </div>
 
-        <div style="margin-bottom: 20px;">
-          <label style="display:block; font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:8px;">ACCENT COLOR</label>
-          <div style="display:flex; gap:10px;" id="grp-color-picker">
-            <button type="button" class="color-opt-btn" data-color="purple" style="background:#818cf8; border:2px solid #fff; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="blue" style="background:#38bdf8; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="emerald" style="background:#34d399; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="amber" style="background:#fbbf24; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
-            <button type="button" class="color-opt-btn" data-color="rose" style="background:#f43f5e; border:none; width:26px; height:26px; border-radius:50%; cursor:pointer;"></button>
+        <div class="grp-modal-field">
+          <label class="grp-modal-label">ACCENT COLOR</label>
+          <div class="grp-color-picker" id="grp-color-picker">
+            <button type="button" class="color-opt-btn selected" data-color="purple"></button>
+            <button type="button" class="color-opt-btn" data-color="blue"></button>
+            <button type="button" class="color-opt-btn" data-color="emerald"></button>
+            <button type="button" class="color-opt-btn" data-color="amber"></button>
+            <button type="button" class="color-opt-btn" data-color="rose"></button>
           </div>
         </div>
 
-        <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button id="cancel-grp-btn" class="tb-btn" style="padding:6px 12px; font-size:12px;">Cancel</button>
-          <button id="confirm-grp-btn" class="tb-btn" style="background:var(--accent-gradient); color:#fff; padding:6px 14px; font-size:12px; border:none;">Create Group</button>
+        <div class="grp-modal-actions">
+          <button id="cancel-grp-btn" class="tb-btn">Cancel</button>
+          <button id="confirm-grp-btn" class="tb-btn primary">Create Group</button>
         </div>
       </div>
     `;
@@ -474,8 +456,8 @@ export class TabBarView {
 
     overlay.querySelectorAll('.color-opt-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        overlay.querySelectorAll('.color-opt-btn').forEach((b) => ((b as HTMLElement).style.border = 'none'));
-        (btn as HTMLElement).style.border = '2px solid #fff';
+        overlay.querySelectorAll('.color-opt-btn').forEach((b) => b.classList.remove('selected'));
+        btn.classList.add('selected');
         selectedColor = btn.getAttribute('data-color') || 'purple';
       });
     });
@@ -496,48 +478,12 @@ export class TabBarView {
     overlay.querySelector('#cancel-grp-btn')?.addEventListener('click', () => overlay.remove());
   }
 
-  private promptRenameGroup(group: TabGroup): void {
-    document.getElementById('new-group-modal')?.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'new-group-modal';
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
-      <div class="modal-content glass-panel" style="max-width: 340px; padding: 20px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-          <h3 style="margin:0; font-size:14px; font-weight:700; color:var(--text-primary);">Rename Group</h3>
-          <button id="close-grp-modal" class="preview-close-btn">&times;</button>
-        </div>
-
-        <div style="margin-bottom: 16px;">
-          <input type="text" id="grp-name-input" class="search-input" value="${escapeHtml(group.name)}" style="width:100%; box-sizing:border-box;" autofocus />
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button id="cancel-grp-btn" class="tb-btn" style="padding:6px 12px; font-size:12px;">Cancel</button>
-          <button id="confirm-grp-btn" class="tb-btn" style="background:var(--accent-gradient); color:#fff; padding:6px 14px; font-size:12px; border:none;">Save</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    const input = overlay.querySelector('#grp-name-input') as HTMLInputElement;
-    input.focus();
-    input.select();
-
-    const submit = () => {
-      const name = input.value.trim();
-      if (name) this.tabManager.renameGroup(group.id, name);
-      overlay.remove();
-    };
-
-    overlay.querySelector('#confirm-grp-btn')?.addEventListener('click', submit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submit();
-      if (e.key === 'Escape') overlay.remove();
+  private async promptRenameGroup(group: TabGroup): Promise<void> {
+    const name = await promptDialog('', {
+      title: 'Rename Group',
+      defaultValue: group.name,
+      confirmText: 'Save',
     });
-    overlay.querySelector('#close-grp-modal')?.addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#cancel-grp-btn')?.addEventListener('click', () => overlay.remove());
+    if (name) this.tabManager.renameGroup(group.id, name);
   }
 }

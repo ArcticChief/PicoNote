@@ -35,16 +35,11 @@ pub struct SearchResult {
     pub match_type: String,
 }
 
+/// Reads a file as text, replacing any invalid UTF-8. Use `read_file_checked`
+/// when the caller needs to know whether the bytes were actually valid.
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
-    match String::from_utf8(bytes) {
-        Ok(text) => Ok(text),
-        Err(err) => {
-            let lossy = String::from_utf8_lossy(err.as_bytes()).to_string();
-            Ok(lossy)
-        }
-    }
+    Ok(read_file_checked(path)?.content)
 }
 
 

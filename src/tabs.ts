@@ -1,4 +1,5 @@
 import { Tab, TabGroup } from './types';
+import { generateId, getBasename, getExtension } from './util';
 
 export class TabManager {
   private tabs: Tab[] = [];
@@ -50,7 +51,7 @@ export class TabManager {
 
 
   public createGroup(name: string, color: string = 'purple'): TabGroup {
-    const id = 'group-' + Math.random().toString(36).substring(2, 9);
+    const id = generateId('group');
     const newGroup: TabGroup = { id, name, color, collapsed: false };
     this.groups.push(newGroup);
     this.notify();
@@ -152,7 +153,7 @@ export class TabManager {
       }
     }
 
-    const id = 'tab-' + Math.random().toString(36).substring(2, 9);
+    const id = generateId('tab');
     const newTab: Tab = {
       id,
       path,
@@ -279,7 +280,7 @@ export class TabManager {
       if (!t.path) continue;
       if (t.path === oldPath) {
         t.path = newPath;
-        t.name = newPath.replace(/\\/g, '/').split('/').pop() || t.name;
+        t.name = getBasename(newPath) || t.name;
         t.language = this.detectLanguage(t.name);
         t.diskMtime = undefined;
         changed = true;
@@ -314,7 +315,7 @@ export class TabManager {
 
 
   private detectLanguage(name: string): string {
-    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')).toLowerCase() : '';
+    const ext = getExtension(name);
     const map: Record<string, string> = {
       '.md': 'Markdown',
       '.markdown': 'Markdown',

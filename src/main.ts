@@ -14,6 +14,8 @@ import { SpotlightSearch } from './spotlight';
 import { TabManager } from './tabs';
 import { ThemeManager } from './theme';
 import { Tab } from './types';
+import { getBasename, getDirname, getExtension, isImageFile } from './util';
+import { confirmDialog, promptDialog } from './dialogs';
 
 
 class PicoNoteApp {
@@ -26,6 +28,13 @@ class PicoNoteApp {
   private splitView!: SplitViewController;
   private autoSaveEnabled: boolean = true;
   private autoSaveTimer: any = null;
+
+  // Editor zoom: a single font-size (px) shared across the main editor and the
+  // split pane so both documents always render at the same zoom level.
+  private static readonly ZOOM_MIN = 8;
+  private static readonly ZOOM_MAX = 40;
+  private static readonly ZOOM_DEFAULT = 14;
+  private zoomFontSize: number = PicoNoteApp.ZOOM_DEFAULT;
 
   private snapshotInterval: any = null;
   private fileWatchInterval: any = null;
@@ -72,6 +81,11 @@ class PicoNoteApp {
 
     this.editor = new CodeMirrorEditor(this.editorContainer);
     this.editor.setTheme(this.themeManager.getTheme() === 'dark');
+    const savedZoom = parseInt(localStorage.getItem('piconote-zoom') || '', 10);
+    this.zoomFontSize = Number.isFinite(savedZoom)
+      ? Math.min(PicoNoteApp.ZOOM_MAX, Math.max(PicoNoteApp.ZOOM_MIN, savedZoom))
+      : PicoNoteApp.ZOOM_DEFAULT;
+    this.editor.setFontSize(this.zoomFontSize);
     // Note: the editor's onChange is registered once in setupEventListeners().
 
 
@@ -107,6 +121,7 @@ class PicoNoteApp {
       tabManager: this.tabManager,
       getMainEditor: () => this.editor,
       isDark: () => this.themeManager.getTheme() === 'dark',
+      getFontSize: () => this.zoomFontSize,
       isAutoSaveEnabled: () => this.autoSaveEnabled,
       isDiskNewer: (tab) => this.isDiskNewer(tab),
       refreshTabDiskMtime: (tab) => this.refreshTabDiskMtime(tab),
@@ -274,10 +289,7 @@ class PicoNoteApp {
 
       let noteDir = mainFolder;
       if (activeTab && activeTab.path) {
-        const lastSlash = Math.max(activeTab.path.lastIndexOf('\\'), activeTab.path.lastIndexOf('/'));
-        if (lastSlash !== -1) {
-          noteDir = activeTab.path.substring(0, lastSlash);
-        }
+        noteDir = getDirname(activeTab.path) ?? noteDir;
       }
 
       if (!noteDir) {
@@ -444,8 +456,8 @@ class PicoNoteApp {
         let tabId = tabById ? tabById.id : null;
 
         if (!tabById && filePath) {
-          const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
-          if (this.isImageFile(filename)) {
+          const filename = getBasename(filePath) || 'file';
+          if (isImageFile(filename)) {
             const t = this.tabManager.findOrOpenTab(filePath, filename, '', !isPane2, 'image');
             tabId = t.id;
           } else {
@@ -490,7 +502,11 @@ class PicoNoteApp {
         this.showToast('Open a workspace folder first.', 'error');
         return;
       }
-      const folderName = prompt('Enter new folder name:');
+      const folderName = await promptDialog('', {
+        title: 'New Folder',
+        placeholder: 'Folder name',
+        confirmText: 'Create',
+      });
       if (folderName) {
         await api.createFolder(`${folder}\\${folderName}`);
         await this.explorer.refresh();
@@ -506,13 +522,13 @@ class PicoNoteApp {
       btn.addEventListener('mousedown', (e) => {
         e.preventDefault();
       });
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
         const fmt = (e.currentTarget as HTMLElement).getAttribute('data-fmt');
         if (fmt === 'table') {
-          const colsInput = prompt('Enter number of columns:', '3');
+          const colsInput = await promptDialog('', { title: 'Insert Table', defaultValue: '3', placeholder: 'Number of columns', confirmText: 'Next' });
           if (colsInput === null) return;
-          const rowsInput = prompt('Enter number of rows:', '3');
+          const rowsInput = await promptDialog('', { title: 'Insert Table', defaultValue: '3', placeholder: 'Number of rows', confirmText: 'Insert' });
           if (rowsInput === null) return;
 
           const cols = Math.max(1, Math.min(parseInt(colsInput, 10) || 3, 20));
@@ -583,9 +599,27 @@ class PicoNoteApp {
         } else if (e.shiftKey && (e.key === 't' || e.key === 'T')) {
           e.preventDefault();
           this.toggleTheme();
+        } else if (e.key === '=' || e.key === '+') {
+          // Ctrl+= (and Ctrl+Shift+= i.e. Ctrl++) zoom in.
+          e.preventDefault();
+          this.zoomIn();
+        } else if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          this.zoomOut();
+        } else if (e.key === '0') {
+          e.preventDefault();
+          this.zoomReset();
         }
       }
     });
+
+    // Ctrl + mouse wheel zooms the editor(s).
+    window.addEventListener('wheel', (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      if (e.deltaY < 0) this.zoomIn();
+      else if (e.deltaY > 0) this.zoomOut();
+    }, { passive: false });
 
   }
 
@@ -594,9 +628,13 @@ class PicoNoteApp {
     this.palette.registerCommands([
       { id: 'spotlight-search', label: 'Workspace: Global Spotlight Search...', shortcut: 'Ctrl+K', action: () => this.spotlight.show() },
       { id: 'format-document', label: 'Format: Auto-Beautify & Align Tables', shortcut: 'Shift+Alt+F', action: () => this.formatDocument() },
-      { id: 'create-tab-group', label: 'Tabs: Create New Tab Group...', action: () => {
+      { id: 'create-tab-group', label: 'Tabs: Create New Tab Group...', action: async () => {
         const active = this.tabManager.getActiveTab();
-        const grpName = prompt('Enter new Tab Group name:');
+        const grpName = await promptDialog('', {
+          title: 'New Tab Group',
+          placeholder: 'Group name',
+          confirmText: 'Create',
+        });
         if (grpName) {
           const grp = this.tabManager.createGroup(grpName);
           if (active) this.tabManager.assignTabToGroup(active.id, grp.id);
@@ -663,16 +701,11 @@ class PicoNoteApp {
     }
   }
 
-  private isImageFile(filename: string): boolean {
-    const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')).toLowerCase() : '';
-    return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp'].includes(ext);
-  }
-
   private async openFileByPath(filePath: string): Promise<void> {
     await this.withLoading(async () => {
       try {
-        const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
-        if (this.isImageFile(filename)) {
+        const filename = getBasename(filePath) || 'file';
+        if (isImageFile(filename)) {
           this.tabManager.openTab(filePath, filename, '', 'image');
           return;
         }
@@ -741,7 +774,7 @@ class PicoNoteApp {
     if (selectedPath) {
       await this.withLoading(async () => {
         await api.writeFile(selectedPath, active.content);
-        const newName = selectedPath.replace(/\\/g, '/').split('/').pop() || active.name;
+        const newName = getBasename(selectedPath) || active.name;
         this.tabManager.markActiveSaved(selectedPath, newName);
         await this.refreshTabDiskMtime(active);
         if (this.explorer.getCurrentFolder()) {
@@ -794,6 +827,34 @@ class PicoNoteApp {
     this.splitView.setTheme(theme === 'dark');
   }
 
+  /** Apply the current zoom to both editors and persist it. */
+  private applyZoom(): void {
+    this.editor.setFontSize(this.zoomFontSize);
+    this.splitView.setFontSize(this.zoomFontSize);
+    localStorage.setItem('piconote-zoom', String(this.zoomFontSize));
+    const pct = Math.round((this.zoomFontSize / PicoNoteApp.ZOOM_DEFAULT) * 100);
+    this.showToast(`Zoom ${pct}% · ${this.zoomFontSize}px`);
+  }
+
+  private setZoom(px: number): void {
+    const clamped = Math.min(PicoNoteApp.ZOOM_MAX, Math.max(PicoNoteApp.ZOOM_MIN, px));
+    if (clamped === this.zoomFontSize) return;
+    this.zoomFontSize = clamped;
+    this.applyZoom();
+  }
+
+  private zoomIn(): void {
+    this.setZoom(this.zoomFontSize + 1);
+  }
+
+  private zoomOut(): void {
+    this.setZoom(this.zoomFontSize - 1);
+  }
+
+  private zoomReset(): void {
+    this.setZoom(PicoNoteApp.ZOOM_DEFAULT);
+  }
+
   private toggleSidebar(): void {
     const sidebar = document.getElementById('sidebar');
     if (sidebar) {
@@ -835,7 +896,7 @@ class PicoNoteApp {
     this.imageViewer.hide();
 
     const fmtBar = document.getElementById('formatting-toolbar');
-    const ext = activeTab ? (activeTab.name.includes('.') ? activeTab.name.slice(activeTab.name.lastIndexOf('.')).toLowerCase() : '') : '';
+    const ext = activeTab ? getExtension(activeTab.name) : '';
     const isMd = ext === '.md' || ext === '.markdown' || !ext;
     if (fmtBar) {
       if (activeTab && isMd && activeTab.kind !== 'image') {
@@ -969,10 +1030,7 @@ class PicoNoteApp {
     const activeTab = this.tabManager.getActiveTab();
     let noteDir = this.explorer.getCurrentFolder();
     if (activeTab && activeTab.path) {
-      const lastSlash = Math.max(activeTab.path.lastIndexOf('\\'), activeTab.path.lastIndexOf('/'));
-      if (lastSlash !== -1) {
-        noteDir = activeTab.path.substring(0, lastSlash);
-      }
+      noteDir = getDirname(activeTab.path) ?? noteDir;
     }
 
     const parsed = parseMarkdown(content, noteDir);
@@ -1092,11 +1150,11 @@ class PicoNoteApp {
   }
 
   public async openFileInSplitPane(filePath: string): Promise<void> {
-    const filename = filePath.replace(/\\/g, '/').split('/').pop() || 'file';
+    const filename = getBasename(filePath) || 'file';
 
     let tab = this.tabManager.getTabs().find((t) => t.path === filePath);
     if (!tab) {
-      if (this.isImageFile(filename)) {
+      if (isImageFile(filename)) {
         tab = this.tabManager.findOrOpenTab(filePath, filename, '', false, 'image');
       } else {
         try {
@@ -1168,54 +1226,11 @@ class PicoNoteApp {
     }
   }
 
-  /** Styled, promise-based confirmation dialog (replaces blocking confirm()). */
-  private confirmDialog(
-    message: string,
-    opts: { title?: string; confirmText?: string; cancelText?: string; danger?: boolean } = {}
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      const overlay = document.createElement('div');
-      overlay.className = 'confirm-overlay';
-      overlay.innerHTML = `
-        <div class="confirm-dialog" role="dialog" aria-modal="true">
-          <div class="confirm-title"></div>
-          <div class="confirm-message"></div>
-          <div class="confirm-actions">
-            <button class="confirm-btn cancel"></button>
-            <button class="confirm-btn ok ${opts.danger ? 'danger' : ''}"></button>
-          </div>
-        </div>`;
-      (overlay.querySelector('.confirm-title') as HTMLElement).textContent = opts.title || 'Confirm';
-      (overlay.querySelector('.confirm-message') as HTMLElement).textContent = message;
-      const cancelBtn = overlay.querySelector('.confirm-btn.cancel') as HTMLButtonElement;
-      const okBtn = overlay.querySelector('.confirm-btn.ok') as HTMLButtonElement;
-      cancelBtn.textContent = opts.cancelText || 'Cancel';
-      okBtn.textContent = opts.confirmText || 'OK';
-
-      document.body.appendChild(overlay);
-      okBtn.focus();
-
-      const cleanup = (result: boolean) => {
-        overlay.remove();
-        document.removeEventListener('keydown', onKey, true);
-        resolve(result);
-      };
-      const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
-        else if (e.key === 'Enter') { e.preventDefault(); cleanup(true); }
-      };
-      document.addEventListener('keydown', onKey, true);
-      overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) cleanup(false); });
-      cancelBtn.addEventListener('click', () => cleanup(false));
-      okBtn.addEventListener('click', () => cleanup(true));
-    });
-  }
-
   /** Close a single tab, confirming first if it has unsaved changes. */
   private async requestCloseTab(tabId: string): Promise<void> {
     const tab = this.tabManager.getTabs().find((t) => t.id === tabId);
     if (tab && tab.isDirty) {
-      const ok = await this.confirmDialog(
+      const ok = await confirmDialog(
         `"${tab.name}" has unsaved changes. Close without saving?`,
         { title: 'Unsaved Changes', confirmText: 'Close Without Saving', danger: true }
       );
@@ -1228,7 +1243,7 @@ class PicoNoteApp {
   private async requestBulkClose(willClose: Tab[], run: () => void): Promise<void> {
     const dirtyCount = willClose.filter((t) => t.isDirty).length;
     if (dirtyCount > 0) {
-      const ok = await this.confirmDialog(
+      const ok = await confirmDialog(
         `${dirtyCount} tab${dirtyCount > 1 ? 's have' : ' has'} unsaved changes. Close without saving?`,
         { title: 'Unsaved Changes', confirmText: 'Close Without Saving', danger: true }
       );

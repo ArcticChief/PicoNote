@@ -7,6 +7,7 @@ interface SplitViewDeps {
   tabManager: TabManager;
   getMainEditor: () => CodeMirrorEditor;
   isDark: () => boolean;
+  getFontSize: () => number;
   isAutoSaveEnabled: () => boolean;
   isDiskNewer: (tab: Tab) => Promise<boolean>;
   refreshTabDiskMtime: (tab: Tab | null) => Promise<void>;
@@ -37,6 +38,11 @@ export class SplitViewController {
 
   public setTheme(isDark: boolean): void {
     this.editor2?.setTheme(isDark);
+  }
+
+  /** Keep pane 2 at the same zoom level as the main editor. */
+  public setFontSize(px: number): void {
+    this.editor2?.setFontSize(px);
   }
 
   /** Show the split panes and open a sensible second document. */
@@ -183,6 +189,7 @@ export class SplitViewController {
     if (!this.editor2 && container2) {
       this.editor2 = new CodeMirrorEditor(container2);
       this.editor2.setTheme(this.deps.isDark());
+      this.editor2.setFontSize(this.deps.getFontSize());
     }
 
     let content = '';

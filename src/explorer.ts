@@ -1,5 +1,9 @@
 import { api } from './api';
 import { FileItem } from './types';
+import { getBasename, getDirname } from './util';
+import { getFileIconSvg } from './icons';
+import { positionContextMenu } from './menu';
+import { confirmDialog, promptDialog } from './dialogs';
 
 let draggedItemPath: string | null = null;
 
@@ -102,7 +106,7 @@ export class FileExplorer {
     listEl.innerHTML = '';
 
     this.favorites.forEach((favPath) => {
-      const filename = favPath.replace(/\\/g, '/').split('/').pop() || favPath;
+      const filename = getBasename(favPath) || favPath;
       const item = document.createElement('div');
       item.className = 'favorite-item';
       item.innerHTML = `<span>⭐</span><span>${filename}</span>`;
@@ -181,7 +185,7 @@ export class FileExplorer {
             ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 14l1-6h14l-2 10H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v2"></path></svg>`
             : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
         } else {
-          icon.innerHTML = this.getFileIcon(item.name);
+          icon.innerHTML = getFileIconSvg(item.name);
         }
 
 
@@ -269,8 +273,7 @@ export class FileExplorer {
           const srcPath = draggedItemPath || e.dataTransfer?.getData('text/plain');
           draggedItemPath = null;
 
-          const lastSlash = Math.max(item.path.lastIndexOf('\\'), item.path.lastIndexOf('/'));
-          const targetDir = item.is_directory ? item.path : (lastSlash !== -1 ? item.path.substring(0, lastSlash) : item.path);
+          const targetDir = item.is_directory ? item.path : (getDirname(item.path) ?? item.path);
 
           // 1. External files dropped from Windows File Explorer
           if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
@@ -287,7 +290,7 @@ export class FileExplorer {
 
           // 2. Internal file / folder move
           if (srcPath && srcPath !== item.path) {
-            const filename = srcPath.replace(/\\/g, '/').split('/').pop();
+            const filename = getBasename(srcPath);
             if (!filename) return;
             const destPath = `${targetDir}\\${filename}`;
             if (srcPath !== destPath) {
@@ -338,19 +341,6 @@ export class FileExplorer {
     } catch (_) {}
   }
 
-  private getFileIcon(filename: string): string {
-    const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')).toLowerCase() : '';
-    const mdSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
-    const codeSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
-    const configSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
-    const fileSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
-
-    if (ext === '.md' || ext === '.markdown') return mdSvg;
-    if (['.js', '.ts', '.jsx', '.tsx', '.py', '.rs', '.go', '.c', '.cpp', '.h', '.sh', '.html', '.css'].includes(ext)) return codeSvg;
-    if (['.json', '.yaml', '.yml', '.toml', '.xml'].includes(ext)) return configSvg;
-    return fileSvg;
-  }
-
   private showContextMenu(x: number, y: number, item: FileItem): void {
     const existing = document.getElementById('context-menu');
     if (existing) existing.remove();
@@ -372,23 +362,7 @@ export class FileExplorer {
       <div class="ctx-item danger" id="ctx-delete">🗑️ Delete</div>
     `;
 
-    document.body.appendChild(menu);
-
-    const rect = menu.getBoundingClientRect();
-    const margin = 10;
-
-    let posX = x;
-    let posY = y;
-
-    if (posX + rect.width > window.innerWidth - margin) {
-      posX = window.innerWidth - rect.width - margin;
-    }
-    if (posY + rect.height > window.innerHeight - margin) {
-      posY = window.innerHeight - rect.height - margin;
-    }
-
-    menu.style.left = `${Math.max(margin, posX)}px`;
-    menu.style.top = `${Math.max(margin, posY)}px`;
+    positionContextMenu(menu, x, y);
 
     const closeMenu = () => {
       menu.remove();
@@ -428,11 +402,16 @@ export class FileExplorer {
       this.renderFavorites();
     });
 
-    const targetDir = item.is_directory ? item.path : item.path.slice(0, item.path.lastIndexOf('\\'));
+    const targetDir = item.is_directory ? item.path : (getDirname(item.path) ?? item.path);
 
     menu.querySelector('#ctx-new-file')?.addEventListener('click', async () => {
       closeMenu();
-      const fileName = prompt('Enter new file name:', 'untitled.md');
+      const fileName = await promptDialog('', {
+        title: 'New File',
+        defaultValue: 'untitled.md',
+        placeholder: 'File name',
+        confirmText: 'Create',
+      });
       if (fileName) {
         const fullPath = `${targetDir}\\${fileName}`;
         await api.createFile(fullPath);
@@ -443,7 +422,11 @@ export class FileExplorer {
 
     menu.querySelector('#ctx-new-folder')?.addEventListener('click', async () => {
       closeMenu();
-      const folderName = prompt('Enter new folder name:');
+      const folderName = await promptDialog('', {
+        title: 'New Folder',
+        placeholder: 'Folder name',
+        confirmText: 'Create',
+      });
       if (folderName) {
         const fullPath = `${targetDir}\\${folderName}`;
         await api.createFolder(fullPath);
@@ -453,15 +436,19 @@ export class FileExplorer {
 
     menu.querySelector('#ctx-reveal')?.addEventListener('click', () => {
       closeMenu();
-      const folderToReveal = item.is_directory ? item.path : item.path.slice(0, item.path.lastIndexOf('\\'));
+      const folderToReveal = item.is_directory ? item.path : (getDirname(item.path) ?? item.path);
       api.openUrl(folderToReveal);
     });
 
     menu.querySelector('#ctx-rename')?.addEventListener('click', async () => {
       closeMenu();
-      const newName = prompt('Rename to:', item.name);
+      const newName = await promptDialog('', {
+        title: 'Rename',
+        defaultValue: item.name,
+        confirmText: 'Rename',
+      });
       if (newName && newName !== item.name) {
-        const parent = item.path.slice(0, item.path.lastIndexOf('\\'));
+        const parent = getDirname(item.path) ?? item.path;
         const newPath = `${parent}\\${newName}`;
         try {
           await api.renameItem(item.path, newPath);
@@ -475,7 +462,12 @@ export class FileExplorer {
 
     menu.querySelector('#ctx-delete')?.addEventListener('click', async () => {
       closeMenu();
-      if (confirm(`Move "${item.name}" to Trash (.trash/)?`)) {
+      const ok = await confirmDialog(`Move "${item.name}" to Trash (.trash/)?`, {
+        title: 'Move to Trash',
+        confirmText: 'Move to Trash',
+        danger: true,
+      });
+      if (ok) {
         try {
           if (this.currentFolder) {
             await api.trashItem(item.path, this.currentFolder);
