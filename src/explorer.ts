@@ -1,7 +1,7 @@
 import { api } from './api';
 import { FileItem } from './types';
-import { getBasename, getDirname } from './util';
-import { getFileIconSvg } from './icons';
+import { getBasename, getDirname, escapeHtml } from './util';
+import { getFileIconSvg, getFolderIconSvg } from './icons';
 import { positionContextMenu } from './menu';
 import { confirmDialog, promptDialog } from './dialogs';
 
@@ -20,7 +20,9 @@ export class FileExplorer {
   private currentFolder: string | null = null;
   private expandedFolders: Set<string> = new Set();
   private filterQuery: string = '';
-  private favorites: Set<string> = new Set(JSON.parse(localStorage.getItem('piconote-favorites') || '[]'));
+  // path -> isDirectory. Tracking the type lets us route a favorite click
+  // correctly (open a file vs. reveal a folder in the tree).
+  private favorites: Map<string, boolean> = new Map();
   private onFileSelect?: (filePath: string) => void;
   private onOpenFileInSplit?: (filePath: string) => void;
   private onToast?: (message: string, variant?: 'info' | 'error' | 'success') => void;
@@ -89,7 +91,153 @@ export class FileExplorer {
       if (this.currentFolder) this.refresh();
     });
 
+    void this.loadFavorites();
+  }
+
+  // ---- Favorites ----
+
+  /** Load favorites, migrating the legacy `string[]` format to `{path,isDirectory}[]`. */
+  private async loadFavorites(): Promise<void> {
+    let raw: unknown = [];
+    try {
+      raw = JSON.parse(localStorage.getItem('piconote-favorites') || '[]');
+    } catch {
+      raw = [];
+    }
+    if (!Array.isArray(raw)) raw = [];
+
+    const map = new Map<string, boolean>();
+    let migrated = false;
+    for (const entry of raw as any[]) {
+      if (typeof entry === 'string') {
+        // Legacy: path only, no type. Probe the disk once so folders route right.
+        migrated = true;
+        let isDir = false;
+        try {
+          isDir = (await api.getFileInfo(entry)).is_directory;
+        } catch {
+          // Unreadable/removed — assume file; a stale entry is handled on click.
+        }
+        map.set(entry, isDir);
+      } else if (entry && typeof entry.path === 'string') {
+        map.set(entry.path, !!entry.isDirectory);
+      }
+    }
+
+    this.favorites = map;
+    if (migrated) this.saveFavorites();
     this.renderFavorites();
+  }
+
+  private saveFavorites(): void {
+    const arr = Array.from(this.favorites, ([path, isDirectory]) => ({ path, isDirectory }));
+    localStorage.setItem('piconote-favorites', JSON.stringify(arr));
+  }
+
+  /** Add/remove an item from favorites, remembering whether it's a folder. */
+  private toggleFavorite(item: FileItem): void {
+    if (this.favorites.has(item.path)) {
+      this.favorites.delete(item.path);
+    } else {
+      this.favorites.set(item.path, item.is_directory);
+    }
+    this.saveFavorites();
+    this.renderFavorites();
+  }
+
+  /** Open a favorite: files open in the editor, folders reveal/expand in the tree. */
+  private async openFavorite(path: string, isDirectory: boolean): Promise<void> {
+    if (!(await api.pathExists(path))) {
+      this.toast(`Favorite no longer exists: ${getBasename(path) || path}`, 'error');
+      this.favorites.delete(path);
+      this.saveFavorites();
+      this.renderFavorites();
+      return;
+    }
+    if (isDirectory) {
+      await this.revealFolder(path);
+    } else if (this.onFileSelect) {
+      this.onFileSelect(path);
+    }
+  }
+
+  /** Reveal a folder in the tree (expanding ancestors), or open it as root if outside. */
+  private async revealFolder(path: string): Promise<void> {
+    const root = this.currentFolder;
+    const underRoot = !!root && (path === root || path.startsWith(root + '\\') || path.startsWith(root + '/'));
+    if (!underRoot) {
+      // Favorite lives outside the current tree — make it the workspace root.
+      await this.openFolder(path);
+      return;
+    }
+    this.expandAncestors(path);
+    this.expandedFolders.add(path);
+    await this.refresh();
+    this.scrollToPath(path);
+  }
+
+  /** Expand every folder from the root down to (and excluding) `path`. */
+  private expandAncestors(path: string): void {
+    const root = this.currentFolder;
+    if (root) this.expandedFolders.add(root);
+    let dir = getDirname(path);
+    while (dir && root && dir.length >= root.length && (dir === root || dir.startsWith(root))) {
+      this.expandedFolders.add(dir);
+      if (dir === root) break;
+      const parent = getDirname(dir);
+      if (!parent || parent === dir) break;
+      dir = parent;
+    }
+  }
+
+  private scrollToPath(path: string): void {
+    try {
+      const row = this.container.querySelector(`.tree-row[data-path="${CSS.escape(path)}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('reveal-flash');
+        setTimeout(() => row.classList.remove('reveal-flash'), 1200);
+      }
+    } catch {
+      // Ignore selector errors.
+    }
+  }
+
+  /** Rewrite favorite paths when an item (and any favorited descendants) is renamed/moved. */
+  private renameFavorites(oldPath: string, newPath: string): void {
+    let changed = false;
+    const next = new Map<string, boolean>();
+    for (const [p, isDir] of this.favorites) {
+      if (p === oldPath) {
+        next.set(newPath, isDir);
+        changed = true;
+      } else if (p.startsWith(oldPath + '\\') || p.startsWith(oldPath + '/')) {
+        next.set(newPath + p.slice(oldPath.length), isDir);
+        changed = true;
+      } else {
+        next.set(p, isDir);
+      }
+    }
+    if (changed) {
+      this.favorites = next;
+      this.saveFavorites();
+      this.renderFavorites();
+    }
+  }
+
+  /** Drop favorites for a deleted item and any favorited descendants. */
+  private removeFavorites(path: string): void {
+    let changed = false;
+    for (const p of Array.from(this.favorites.keys())) {
+      if (p === path || p.startsWith(path + '\\') || p.startsWith(path + '/')) {
+        this.favorites.delete(p);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.saveFavorites();
+      this.renderFavorites();
+    }
   }
 
   public renderFavorites(): void {
@@ -105,14 +253,14 @@ export class FileExplorer {
     container.classList.remove('hidden');
     listEl.innerHTML = '';
 
-    this.favorites.forEach((favPath) => {
-      const filename = getBasename(favPath) || favPath;
+    this.favorites.forEach((isDirectory, favPath) => {
+      const name = getBasename(favPath) || favPath;
       const item = document.createElement('div');
       item.className = 'favorite-item';
-      item.innerHTML = `<span>⭐</span><span>${filename}</span>`;
-      item.addEventListener('click', () => {
-        if (this.onFileSelect) this.onFileSelect(favPath);
-      });
+      item.title = favPath;
+      const icon = isDirectory ? getFolderIconSvg(13) : getFileIconSvg(name, 13);
+      item.innerHTML = `<span class="favorite-icon">${icon}</span><span class="favorite-name">${escapeHtml(name)}</span>`;
+      item.addEventListener('click', () => void this.openFavorite(favPath, isDirectory));
       listEl.appendChild(item);
     });
   }
@@ -181,9 +329,7 @@ export class FileExplorer {
         icon.className = 'tree-icon';
         if (item.is_directory) {
           const isExpanded = this.expandedFolders.has(item.path);
-          icon.innerHTML = isExpanded
-            ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 14l1-6h14l-2 10H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v2"></path></svg>`
-            : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+          icon.innerHTML = getFolderIconSvg(14, isExpanded);
         } else {
           icon.innerHTML = getFileIconSvg(item.name);
         }
@@ -296,6 +442,7 @@ export class FileExplorer {
             if (srcPath !== destPath) {
               try {
                 await api.renameItem(srcPath, destPath);
+                this.renameFavorites(srcPath, destPath);
                 if (this.onFileRenamed) this.onFileRenamed(srcPath, destPath);
                 await this.refresh();
               } catch (err: any) {
@@ -391,15 +538,8 @@ export class FileExplorer {
     }
 
     menu.querySelector('#ctx-fav')?.addEventListener('click', () => {
-
       closeMenu();
-      if (this.favorites.has(item.path)) {
-        this.favorites.delete(item.path);
-      } else {
-        this.favorites.add(item.path);
-      }
-      localStorage.setItem('piconote-favorites', JSON.stringify(Array.from(this.favorites)));
-      this.renderFavorites();
+      this.toggleFavorite(item);
     });
 
     const targetDir = item.is_directory ? item.path : (getDirname(item.path) ?? item.path);
@@ -452,6 +592,7 @@ export class FileExplorer {
         const newPath = `${parent}\\${newName}`;
         try {
           await api.renameItem(item.path, newPath);
+          this.renameFavorites(item.path, newPath);
           if (this.onFileRenamed) this.onFileRenamed(item.path, newPath);
           await this.refresh();
         } catch (err: any) {
@@ -474,6 +615,7 @@ export class FileExplorer {
           } else {
             await api.deleteItem(item.path);
           }
+          this.removeFavorites(item.path);
           if (this.onFileDeleted) this.onFileDeleted(item.path);
           await this.refresh();
         } catch (err: any) {

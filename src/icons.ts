@@ -7,6 +7,14 @@ import { getExtension } from './util';
 const CODE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.py', '.rs', '.go', '.c', '.cpp', '.h', '.sh', '.html', '.css'];
 const CONFIG_EXTENSIONS = ['.json', '.yaml', '.yml', '.toml', '.xml'];
 
+/** Returns an inline folder SVG, `open` for an expanded folder. Uses currentColor. */
+export function getFolderIconSvg(size: number = 14, open: boolean = false): string {
+  const d = open
+    ? 'M6 14l1-6h14l-2 10H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v2'
+    : 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${d}"></path></svg>`;
+}
+
 /** Returns an inline SVG string for a file's type icon, sized to `size` px. */
 export function getFileIconSvg(filename: string, size: number = 14): string {
   const ext = getExtension(filename);

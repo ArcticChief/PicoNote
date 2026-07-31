@@ -871,6 +871,29 @@ body, html {
   color: var(--text-primary);
 }
 
+.favorite-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--accent-amber);
+}
+
+.favorite-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Brief highlight when a favorite folder is revealed in the tree */
+.tree-row.reveal-flash {
+  animation: reveal-flash 1.2s ease-out;
+}
+
+@keyframes reveal-flash {
+  0%, 40% { background-color: var(--accent-amber); color: #1a1205; }
+  100% { background-color: transparent; }
+}
+
 
 
 
